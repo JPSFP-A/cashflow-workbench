@@ -3,198 +3,751 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cashflow Workbench</title>
+  <title>Cashflow Workbench — JPS FP&amp;A</title>
   <style>
-    :root{--ink:#17202a;--muted:#5e6875;--line:#d9e0e8;--soft:#f6f8fb;--blue:#174a7c;--green:#0f766e;--red:#b91c1c;--gold:#8a5b00;--amber:#92400e}
-    *{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:var(--ink);background:#fff;font-size:14px}
-    header{padding:16px 24px;border-bottom:1px solid var(--line);background:#f8fafc;display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
-    h1{margin:0 0 4px;font-size:22px}p{margin:0;color:var(--muted)}main{padding:16px 24px;max-width:1680px;margin:auto}
-    .panel{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:12px}.panel h2{font-size:15px;margin:0;padding:10px 14px;background:var(--soft);border-bottom:1px solid var(--line);border-radius:8px 8px 0 0}.panel>*:not(h2){margin:10px 14px}
-    .grid{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:10px}.split{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}.triple{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-    .kpis{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px;margin-bottom:12px}.kpi{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}.kpi b{display:block;font-size:18px;margin-top:3px}.kpi.warn-kpi b{color:var(--gold)}.kpi.bad-kpi b{color:var(--red)}
-    label{display:flex;flex-direction:column;gap:4px;color:var(--muted)}button,input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;background:white;padding:7px 10px}button{cursor:pointer}.primary{background:var(--blue);border-color:var(--blue);color:white}.good{background:var(--green);border-color:var(--green);color:white}.danger{background:#fff5f5;border-color:#fecaca;color:var(--red)}.warn{background:#fffbeb;border-color:#fcd34d;color:var(--gold)}button:disabled{opacity:.45;cursor:default}
-    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tab{position:relative}.tab.active{background:var(--blue);color:white;border-color:var(--blue)}.tab .badge{position:absolute;top:-7px;right:-7px;background:var(--red);color:#fff;border-radius:999px;font-size:10px;padding:1px 5px;line-height:1.5;display:none}.tab .badge.show{display:block}.tabPanel{display:none}.tabPanel.active{display:block}
-    .tablebox{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:8px}.tablebox.tall{max-height:66vh}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{position:sticky;top:0;background:#edf3f8;font-size:11px;text-transform:uppercase;letter-spacing:.03em}.num{text-align:right;font-variant-numeric:tabular-nums}tr:hover td{background:#f8fafc}
-    .hint{font-size:12px;color:var(--muted)}.stack{display:grid;gap:8px}.prose{line-height:1.55;max-width:980px}.status{min-width:220px;text-align:right;color:var(--muted);font-size:12px}.pill{display:inline-block;border-radius:999px;padding:2px 8px;background:#eef3f8;font-size:11px}.bad{font-weight:700;color:var(--red)}.ok{font-weight:700;color:var(--green)}.setup{background:#fff8e6;border-color:#f5d28a}
-    .month-bar{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:13px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
-    .month-bar strong{color:var(--blue)}.month-bar .sep{color:var(--line)}
-    .exc-badge{display:inline-block;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600}
-    .exc-badge.unmapped{background:#fee2e2;color:var(--red)}.exc-badge.norow{background:#fef3c7;color:var(--amber)}.exc-badge.ok{background:#d1fae5;color:var(--green)}
-    .reapply-prompt{background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:9px 12px;display:flex;gap:10px;align-items:center;font-size:13px;margin-bottom:4px}
-    .search-row{display:flex;gap:8px;align-items:center;margin-bottom:4px}
-    @media(max-width:1100px){header{display:block}.grid,.split,.triple,.kpis{grid-template-columns:1fr}.tablebox{max-height:52vh}}
+    /* ── Tokens ───────────────────────────────────────────────────── */
+    :root {
+      --navy:   #0f2744;
+      --blue:   #174a7c;
+      --blue2:  #1d5c99;
+      --teal:   #0f766e;
+      --red:    #b91c1c;
+      --amber:  #92400e;
+      --gold:   #8a5b00;
+      --ink:    #17202a;
+      --muted:  #5e6875;
+      --line:   #dce4ed;
+      --soft:   #f4f7fb;
+      --white:  #ffffff;
+      --shadow: 0 2px 12px rgba(15,39,68,.10), 0 1px 3px rgba(15,39,68,.06);
+      --shadow-lg: 0 12px 40px rgba(15,39,68,.22), 0 4px 12px rgba(15,39,68,.12);
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", system-ui, Arial, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; }
+
+    /* ── Welcome screen ───────────────────────────────────────────── */
+    #welcomeScreen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: linear-gradient(145deg, #061624 0%, #0f2744 45%, #174a7c 100%);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    #welcomeScreen.hiding {
+      animation: welcomeFade 0.45s ease forwards;
+    }
+    @keyframes welcomeFade { to { opacity: 0; transform: scale(1.03); } }
+
+    .welcome-card {
+      background: var(--white);
+      border-radius: 20px;
+      padding: 52px 48px 44px;
+      max-width: 460px;
+      width: 100%;
+      text-align: center;
+      box-shadow: var(--shadow-lg);
+      animation: slideUp 0.4s cubic-bezier(.22,.8,.36,1);
+    }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+
+    .welcome-icon {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue2) 100%);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 32px; margin-bottom: 24px;
+      box-shadow: 0 8px 24px rgba(23,74,124,.35);
+    }
+    .welcome-card h1 { font-size: 26px; font-weight: 700; color: var(--navy); letter-spacing: -.3px; }
+    .welcome-card .welcome-sub { font-size: 13px; color: var(--muted); margin-top: 4px; margin-bottom: 32px; }
+
+    .welcome-divider { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+
+    .welcome-form label { display: block; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+    .welcome-form input {
+      width: 100%; padding: 12px 14px; font: inherit; font-size: 15px;
+      border: 1.5px solid var(--line); border-radius: var(--radius-sm);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+      color: var(--ink);
+    }
+    .welcome-form input:focus { border-color: var(--blue2); box-shadow: 0 0 0 3px rgba(23,74,124,.12); }
+    .welcome-form input.shake { animation: shake .35s ease; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+
+    #welcomeBtn {
+      margin-top: 14px; width: 100%; padding: 13px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue2) 100%);
+      color: white; font: inherit; font-size: 15px; font-weight: 600;
+      border: none; border-radius: var(--radius-sm); cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      box-shadow: 0 4px 14px rgba(23,74,124,.30);
+    }
+    #welcomeBtn:hover { opacity: .92; }
+    #welcomeBtn:active { transform: scale(.98); }
+
+    .welcome-hint { font-size: 12px; color: var(--muted); margin-top: 20px; line-height: 1.6; }
+    .welcome-hint span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); margin-right: 5px; vertical-align: middle; }
+
+    /* ── App shell ────────────────────────────────────────────────── */
+    #appShell { display: none; flex-direction: column; min-height: 100vh; }
+    #appShell.visible { display: flex; }
+
+    header {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+      padding: 0 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; min-height: 64px;
+      box-shadow: 0 2px 12px rgba(15,39,68,.25);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-brand { display: flex; align-items: center; gap: 12px; }
+    .header-brand-icon {
+      width: 38px; height: 38px; border-radius: 9px;
+      background: rgba(255,255,255,.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .header-brand h1 { font-size: 18px; font-weight: 700; color: white; letter-spacing: -.2px; }
+    .header-brand p { font-size: 11px; color: rgba(255,255,255,.6); margin-top: 1px; }
+
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .user-badge {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px; padding: 5px 14px 5px 6px;
+      cursor: pointer; transition: background .15s;
+    }
+    .user-badge:hover { background: rgba(255,255,255,.18); }
+    .user-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--teal) 0%, #14b8a6 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: white;
+      flex-shrink: 0;
+    }
+    .user-name { font-size: 13px; font-weight: 600; color: white; }
+
+    .status-pill {
+      font-size: 11px; padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.1);
+      color: rgba(255,255,255,.75);
+      border: 1px solid rgba(255,255,255,.15);
+    }
+    .status-pill.ok  { background: rgba(15,118,110,.25); color: #5eead4; border-color: rgba(94,234,212,.25); }
+    .status-pill.bad { background: rgba(185,28,28,.25);  color: #fca5a5; border-color: rgba(252,165,165,.2); }
+
+    /* ── Main content ─────────────────────────────────────────────── */
+    main { padding: 20px 28px 40px; max-width: 1720px; margin: 0 auto; width: 100%; }
+
+    /* ── Setup panel ──────────────────────────────────────────────── */
+    .setup-banner {
+      background: #fff8e6; border: 1px solid #f5d28a;
+      border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px;
+      display: none; font-size: 13px;
+    }
+
+    /* ── Month workspace card ─────────────────────────────────────── */
+    .workspace-card {
+      background: var(--white); border-radius: var(--radius);
+      box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden;
+    }
+    .workspace-card-head {
+      padding: 14px 20px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      flex-wrap: wrap;
+    }
+    .workspace-card-head h2 { font-size: 14px; font-weight: 700; color: var(--navy); }
+    .workspace-card-body { padding: 18px 20px; }
+
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .file-slot {
+      border: 1.5px dashed var(--line); border-radius: var(--radius-sm);
+      padding: 12px 14px; background: var(--soft);
+      transition: border-color .15s, background .15s;
+    }
+    .file-slot:focus-within { border-color: var(--blue2); background: #f0f6ff; }
+    .file-slot label { display: block; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .file-slot input[type=file] { font: inherit; font-size: 12px; width: 100%;
+      color: var(--ink); background: none; border: none; outline: none; padding: 0; cursor: pointer; }
+
+    .month-selectors { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: flex-end; }
+    .month-selectors label { display: flex; flex-direction: column; gap: 5px;
+      font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .month-selectors input, .month-selectors select {
+      font: inherit; font-size: 13px; border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm); padding: 8px 10px; background: white;
+      color: var(--ink); outline: none; transition: border-color .15s;
+    }
+    .month-selectors input:focus, .month-selectors select:focus { border-color: var(--blue2); }
+
+    /* ── Buttons ──────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font: inherit; font-size: 13px; font-weight: 600;
+      padding: 8px 16px; border-radius: var(--radius-sm);
+      border: 1.5px solid transparent; cursor: pointer;
+      transition: opacity .15s, transform .1s, box-shadow .15s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: default; transform: none; }
+    .btn-primary { background: var(--blue); color: white; border-color: var(--blue); box-shadow: 0 2px 8px rgba(23,74,124,.25); }
+    .btn-primary:hover:not(:disabled) { background: var(--blue2); border-color: var(--blue2); }
+    .btn-teal   { background: var(--teal); color: white; border-color: var(--teal); box-shadow: 0 2px 8px rgba(15,118,110,.25); }
+    .btn-teal:hover:not(:disabled) { opacity: .88; }
+    .btn-ghost  { background: var(--soft); color: var(--ink); border-color: var(--line); }
+    .btn-ghost:hover:not(:disabled) { background: #e9eef5; }
+    .btn-danger { background: #fff5f5; color: var(--red); border-color: #fecaca; }
+    .btn-danger:hover:not(:disabled) { background: #fee2e2; }
+    .btn-warn   { background: #fffbeb; color: var(--gold); border-color: #fcd34d; }
+    .btn-sm { font-size: 12px; padding: 5px 10px; }
+
+    .action-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .action-bar-sep { flex: 1; }
+    .export-group { display: flex; gap: 6px; }
+
+    /* ── Month status bar ─────────────────────────────────────────── */
+    .month-bar {
+      display: none;
+      background: linear-gradient(90deg, #eef6ff 0%, #f4f9ff 100%);
+      border: 1px solid #bfdbfe; border-radius: var(--radius);
+      padding: 10px 18px; margin-bottom: 16px;
+      font-size: 13px; gap: 16px; align-items: center; flex-wrap: wrap;
+    }
+    .month-bar.visible { display: flex; }
+    .month-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue2); flex-shrink: 0; }
+    .month-bar strong { color: var(--navy); font-size: 15px; }
+    .month-bar .sep { color: var(--line); }
+    .month-bar .meta { font-size: 12px; color: var(--muted); }
+
+    /* ── KPI tiles ────────────────────────────────────────────────── */
+    .kpi-row { display: grid; grid-template-columns: repeat(6, minmax(130px,1fr)); gap: 10px; margin-bottom: 16px; }
+    .kpi-tile {
+      background: var(--white); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 14px 16px;
+      box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .kpi-tile .kpi-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .kpi-tile .kpi-icon { font-size: 18px; line-height: 1; }
+    .kpi-tile .kpi-value { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .kpi-tile.warn .kpi-value { color: var(--gold); }
+    .kpi-tile.bad  .kpi-value { color: var(--red); }
+    .kpi-tile.good .kpi-value { color: var(--teal); }
+
+    /* ── Tab navigation ───────────────────────────────────────────── */
+    .tab-nav {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      background: var(--white); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 5px;
+      margin-bottom: 16px; box-shadow: var(--shadow);
+    }
+    .tab-btn {
+      position: relative; font: inherit; font-size: 13px; font-weight: 500;
+      padding: 8px 16px; border-radius: 7px; border: none;
+      background: transparent; color: var(--muted);
+      cursor: pointer; transition: background .15s, color .15s;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .tab-btn:hover { background: var(--soft); color: var(--ink); }
+    .tab-btn.active {
+      background: var(--blue); color: white;
+      box-shadow: 0 2px 8px rgba(23,74,124,.25);
+    }
+    .tab-badge {
+      background: var(--red); color: white;
+      border-radius: 999px; font-size: 10px; font-weight: 700;
+      padding: 1px 6px; line-height: 1.5;
+      display: none;
+    }
+    .tab-badge.show { display: inline-block; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Content panels / cards ───────────────────────────────────── */
+    .panel {
+      background: var(--white); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      margin-bottom: 12px; overflow: hidden;
+    }
+    .panel-head {
+      padding: 11px 16px; background: var(--soft);
+      border-bottom: 1px solid var(--line);
+      font-size: 13px; font-weight: 700; color: var(--navy);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .panel-body { padding: 14px 16px; }
+
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .grid-2  { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
+
+    /* ── Tables ───────────────────────────────────────────────────── */
+    .tablebox { overflow: auto; max-height: 58vh; border-radius: 0 0 var(--radius) var(--radius); }
+    .tablebox.tall { max-height: 66vh; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #edf3f8; font-size: 11px; font-weight: 700;
+         text-transform: uppercase; letter-spacing: .04em; color: var(--muted); z-index: 1; }
+    tr:hover td { background: #f6f9fd; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── Exception badges ─────────────────────────────────────────── */
+    .exc-badge { display: inline-block; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
+    .exc-badge.unmapped { background: #fee2e2; color: var(--red); }
+    .exc-badge.norow    { background: #fef3c7; color: var(--amber); }
+    .exc-badge.ok       { background: #d1fae5; color: var(--teal); }
+
+    /* ── Rule form ────────────────────────────────────────────────── */
+    .form-stack { display: grid; gap: 10px; }
+    .form-field { display: flex; flex-direction: column; gap: 5px; }
+    .form-field label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .form-field input, .form-field select, .form-field textarea {
+      font: inherit; font-size: 13px; border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm); padding: 8px 10px;
+      background: white; color: var(--ink); outline: none; transition: border-color .15s;
+      width: 100%;
+    }
+    .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: var(--blue2); }
+    .form-field textarea { resize: vertical; }
+
+    .reapply-prompt {
+      background: #fffbeb; border: 1px solid #fcd34d; border-radius: var(--radius-sm);
+      padding: 10px 14px; display: none; gap: 10px; align-items: center;
+      font-size: 13px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .reapply-prompt.visible { display: flex; }
+
+    /* ── Search / filter bar ──────────────────────────────────────── */
+    .search-bar { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    .search-bar input, .search-bar select {
+      font: inherit; font-size: 13px; border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm); padding: 7px 10px;
+      background: white; color: var(--ink); outline: none; transition: border-color .15s;
+    }
+    .search-bar input { flex: 1; }
+    .search-bar input:focus, .search-bar select:focus { border-color: var(--blue2); }
+
+    /* ── Prose / instructions ─────────────────────────────────────── */
+    .prose { padding: 20px 24px; line-height: 1.65; color: var(--ink); max-width: 900px; }
+    .prose h2 { font-size: 15px; margin-bottom: 10px; margin-top: 20px; color: var(--navy); }
+    .prose h2:first-child { margin-top: 0; }
+    .prose ol, .prose ul { padding-left: 22px; margin-bottom: 12px; }
+    .prose li { margin-bottom: 5px; }
+    .prose p { margin-bottom: 12px; }
+
+    /* ── Misc ─────────────────────────────────────────────────────── */
+    .hint { font-size: 12px; color: var(--muted); }
+    .bad  { font-weight: 700; color: var(--red); }
+    .ok   { font-weight: 700; color: var(--teal); }
+    .pill { display: inline-block; border-radius: 999px; padding: 2px 9px; background: #eef3f8; font-size: 11px; }
+
+    /* ── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 1100px) {
+      .grid-3, .grid-2 { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: repeat(3, 1fr); }
+      .tablebox { max-height: 52vh; }
+      main { padding: 14px 16px 32px; }
+    }
+    @media (max-width: 640px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .welcome-card { padding: 36px 28px 32px; }
+      header { padding: 0 16px; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WELCOME SCREEN
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="welcomeScreen">
+    <div class="welcome-card">
+      <div class="welcome-icon">📊</div>
       <h1>Cashflow Workbench</h1>
-      <p>Supabase-backed cashflow mapper — AP outflows, cashbook validation, month storage, audit logging.</p>
+      <p class="welcome-sub">JPS Financial Planning &amp; Analysis</p>
+      <hr class="welcome-divider">
+      <div class="welcome-form">
+        <label for="welcomeNameInput">Your full name</label>
+        <input id="welcomeNameInput" placeholder="e.g. Jane Smith" autocomplete="name" autocapitalize="words">
+        <button id="welcomeBtn">Enter Workbench →</button>
+      </div>
+      <p class="welcome-hint"><span></span>Your name is recorded on every upload, rule change, and audit log entry.</p>
     </div>
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <label style="flex-direction:row;gap:8px;align-items:center;margin:0;color:var(--muted);white-space:nowrap">
-        Your name&nbsp;<input id="nameInput" placeholder="e.g. Jane Smith" style="width:160px;padding:6px 10px">
-      </label>
-      <div class="status" id="statusBox">Checking configuration...</div>
-    </div>
-  </header>
-  <main>
-    <section class="panel setup" id="setupPanel" style="display:none">
-      <h2>Supabase Setup</h2>
-      <div class="prose">
-        <p>Add a <code>config.js</code> with your Supabase project URL and anon key (use <code>config.example.js</code> as the template), then run the SQL in <code>supabase/schema.sql</code>.</p>
-      </div>
-    </section>
+  </div>
 
-    <section class="panel" id="monthPanel">
-      <h2>Month Workspace</h2>
-      <div class="grid">
-        <label>Month <input id="monthInput" type="month"></label>
-        <label>Saved months <select id="monthSelect"></select></label>
-        <label>AP invoice/payment report <input id="apFile" type="file" accept=".txt,.csv"></label>
-        <label>Cashbook description (180) <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv"></label>
-        <label>Cashbook account (132) <input id="cashbookAccountFile" type="file" accept=".txt,.csv"></label>
-        <label>Optional rules import CSV <input id="mappingFile" type="file" accept=".csv"></label>
-      </div>
-      <div class="toolbar">
-        <button class="primary" id="processBtn">Process &amp; Save Month</button>
-        <button id="loadMonthBtn">Load Month</button>
-        <button id="reapplyBtn">Reapply Saved Rules</button>
-        <button class="danger" id="resetBtn">Reset / Wipe Month</button>
-        <span style="flex:1"></span>
-        <button id="exportRecordsBtn">Export Records CSV</button>
-        <button id="exportRulesBtn">Export Rules CSV</button>
-        <button id="exportReportBtn">Export Excel Report</button>
-      </div>
-      <p class="hint">Source files are stored in Supabase so the month can be reprocessed. Reset wipes the month data and logs the action.</p>
-    </section>
+  <!-- ═══════════════════════════════════════════════════════════════
+       APP SHELL (hidden until welcome is dismissed)
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="appShell">
 
-    <div class="month-bar" id="monthBar" style="display:none"></div>
-
-    <section class="kpis" id="kpis"></section>
-
-    <nav class="tabs">
-      <button class="tab active" data-tab="outflows">Outflow Validation</button>
-      <button class="tab" data-tab="exceptions">Map Exceptions <span class="badge" id="excBadge"></span></button>
-      <button class="tab" data-tab="base">Base Case</button>
-      <button class="tab" data-tab="rules">Rules</button>
-      <button class="tab" data-tab="audit">Audit</button>
-      <button class="tab" data-tab="instructions">Instructions</button>
-    </nav>
-
-    <section class="tabPanel active" id="outflows">
-      <div class="triple">
-        <div class="panel"><h2>AP Outflows — By Base Case Row</h2><div class="tablebox"><table id="outflowBaseTable"></table></div></div>
-        <div class="panel"><h2>AP Outflows — By Category</h2><div class="tablebox"><table id="outflowCategoryTable"></table></div></div>
-        <div class="panel"><h2>Cashbook Summary</h2><div class="tablebox"><table id="cashbookCheckTable"></table></div></div>
-      </div>
-    </section>
-
-    <section class="tabPanel" id="exceptions">
-      <div class="split">
-        <div class="panel">
-          <h2>Exceptions / Unmapped Lines</h2>
-          <div class="toolbar">
-            <input id="searchInput" placeholder="Search vendor, pay group, FPC, description" style="flex:1;min-width:180px">
-            <select id="sourceFilter">
-              <option value="ap">AP outflows</option>
-              <option value="cashbook_debit">Cashbook debits</option>
-              <option value="cashbook_credit">Cashbook credits</option>
-              <option value="all">All sources</option>
-            </select>
-          </div>
-          <div class="tablebox tall"><table id="exceptionsTable"></table></div>
+    <header>
+      <div class="header-brand">
+        <div class="header-brand-icon">📊</div>
+        <div>
+          <h1>Cashflow Workbench</h1>
+          <p>JPS Financial Planning &amp; Analysis</p>
         </div>
-        <div class="panel">
-          <h2>Add / Edit Rule</h2>
-          <div id="reapplyPrompt" class="reapply-prompt" style="display:none">
-            <span>Rule saved — rebuild this month with the updated rules?</span>
-            <button class="warn" id="promptReapplyBtn">Reapply Now</button>
-            <button id="promptDismissBtn" style="font-size:11px">Dismiss</button>
+      </div>
+      <div class="header-right">
+        <div class="user-badge" id="userBadge" title="Click to change name">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <span class="user-name" id="userNameDisplay">—</span>
+        </div>
+        <div class="status-pill" id="statusBox">Connecting…</div>
+        <!-- Hidden input keeps userName() working without changes to app.js -->
+        <input id="nameInput" style="display:none">
+      </div>
+    </header>
+
+    <main>
+      <!-- Setup notice -->
+      <div class="setup-banner" id="setupPanel">
+        ⚠️ Add a <code>config.js</code> with your Supabase URL and anon key, then run <code>supabase/schema.sql</code>.
+      </div>
+
+      <!-- Month workspace -->
+      <div class="workspace-card" id="monthPanel">
+        <div class="workspace-card-head">
+          <h2>Month Workspace</h2>
+          <div class="export-group">
+            <button class="btn btn-ghost btn-sm" id="exportRecordsBtn">⬇ Records CSV</button>
+            <button class="btn btn-ghost btn-sm" id="exportRulesBtn">⬇ Rules CSV</button>
+            <button class="btn btn-ghost btn-sm" id="exportReportBtn">⬇ Excel Report</button>
           </div>
-          <div class="stack">
-            <label>Rule code <input id="ruleCodeValue" placeholder="Auto-generated for new rules"></label>
-            <label>Rule type
-              <select id="ruleType">
-                <option value="vendor_contains">Vendor contains</option>
-                <option value="paygroup_contains">Pay group contains</option>
-                <option value="fpc_equals">FPC equals</option>
-                <option value="fpc_prefix">FPC starts with</option>
-                <option value="fpc_range">FPC range</option>
-                <option value="description_contains">Description contains</option>
-                <option value="cashbook_cost_range">Cashbook cost item range</option>
-              </select>
-            </label>
-            <label>Match value <input id="matchValue" placeholder="e.g. JAMECO, 16501, 30000-39999, 321-322"></label>
-            <label>Category <input id="categoryValue"></label>
-            <label>Base Case row <select id="baseRowValue"></select></label>
-            <label>Applies to
-              <select id="appliesTo">
+        </div>
+        <div class="workspace-card-body">
+          <div class="month-selectors">
+            <label>Month <input id="monthInput" type="month" style="width:160px"></label>
+            <label>Saved months <select id="monthSelect" style="min-width:240px"></select></label>
+            <button class="btn btn-primary" id="processBtn">▶ Process &amp; Save</button>
+            <button class="btn btn-ghost" id="loadMonthBtn">↩ Load Month</button>
+            <button class="btn btn-ghost" id="reapplyBtn">↻ Reapply Rules</button>
+            <button class="btn btn-danger" id="resetBtn">✕ Reset Month</button>
+          </div>
+          <div class="file-grid">
+            <div class="file-slot">
+              <label>AP Invoice / Payment Report</label>
+              <input id="apFile" type="file" accept=".txt,.csv">
+            </div>
+            <div class="file-slot">
+              <label>Cashbook Description (180)</label>
+              <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv">
+            </div>
+            <div class="file-slot">
+              <label>Cashbook Account (132)</label>
+              <input id="cashbookAccountFile" type="file" accept=".txt,.csv">
+            </div>
+            <div class="file-slot">
+              <label>Optional Rules Import CSV</label>
+              <input id="mappingFile" type="file" accept=".csv">
+            </div>
+          </div>
+          <p class="hint">Source files are stored in Supabase so the month can be reprocessed at any time. Reset wipes all records and uploads for the selected month.</p>
+        </div>
+      </div>
+
+      <!-- Month status bar -->
+      <div class="month-bar" id="monthBar">
+        <div class="month-bar-dot"></div>
+        <strong id="monthBarKey"></strong>
+        <span class="sep">|</span>
+        <span class="meta" id="monthBarMeta"></span>
+      </div>
+
+      <!-- KPI row -->
+      <div class="kpi-row" id="kpis"></div>
+
+      <!-- Tab navigation -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="outflows">📤 Outflow Validation</button>
+        <button class="tab-btn" data-tab="exceptions">🔍 Map Exceptions <span class="tab-badge" id="excBadge"></span></button>
+        <button class="tab-btn" data-tab="base">📋 Base Case</button>
+        <button class="tab-btn" data-tab="rules">⚙ Rules</button>
+        <button class="tab-btn" data-tab="audit">📜 Audit Log</button>
+        <button class="tab-btn" data-tab="instructions">❓ Instructions</button>
+      </nav>
+
+      <!-- ── Outflow Validation ── -->
+      <div class="tab-panel active" id="outflows">
+        <div class="grid-3">
+          <div class="panel">
+            <div class="panel-head">AP Outflows — By Base Case Row</div>
+            <div class="tablebox"><table id="outflowBaseTable"></table></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">AP Outflows — By Category</div>
+            <div class="tablebox"><table id="outflowCategoryTable"></table></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">Cashbook Summary</div>
+            <div class="tablebox"><table id="cashbookCheckTable"></table></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Map Exceptions ── -->
+      <div class="tab-panel" id="exceptions">
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head">Exceptions / Unmapped Lines</div>
+            <div class="search-bar">
+              <input id="searchInput" placeholder="Search vendor, pay group, FPC, description…">
+              <select id="sourceFilter">
                 <option value="ap">AP outflows</option>
                 <option value="cashbook_debit">Cashbook debits</option>
                 <option value="cashbook_credit">Cashbook credits</option>
-                <option value="cashbook">Cashbook all</option>
                 <option value="all">All sources</option>
               </select>
-            </label>
-            <label>Optional pay group filter <input id="paygroupFilterValue"></label>
-            <label>Notes <textarea id="notesValue" rows="2"></textarea></label>
-            <div class="toolbar">
-              <button class="good" id="saveRuleBtn">Save Rule</button>
-              <button id="clearRuleBtn">Clear</button>
+            </div>
+            <div class="tablebox tall"><table id="exceptionsTable"></table></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">Add / Edit Rule</div>
+            <div class="panel-body">
+              <div class="reapply-prompt" id="reapplyPrompt">
+                <span style="flex:1">Rule saved — rebuild this month with the updated rules?</span>
+                <button class="btn btn-warn btn-sm" id="promptReapplyBtn">Reapply Now</button>
+                <button class="btn btn-ghost btn-sm" id="promptDismissBtn">Dismiss</button>
+              </div>
+              <div class="form-stack">
+                <div class="form-field">
+                  <label>Rule code</label>
+                  <input id="ruleCodeValue" placeholder="Auto-generated for new rules">
+                </div>
+                <div class="form-field">
+                  <label>Rule type</label>
+                  <select id="ruleType">
+                    <option value="vendor_contains">Vendor contains</option>
+                    <option value="paygroup_contains">Pay group contains</option>
+                    <option value="fpc_equals">FPC equals</option>
+                    <option value="fpc_prefix">FPC starts with</option>
+                    <option value="fpc_range">FPC range</option>
+                    <option value="description_contains">Description contains</option>
+                    <option value="cashbook_cost_range">Cashbook cost item range</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Match value</label>
+                  <input id="matchValue" placeholder="e.g. JAMECO, 16501, 30000-39999">
+                </div>
+                <div class="form-field">
+                  <label>Category</label>
+                  <input id="categoryValue">
+                </div>
+                <div class="form-field">
+                  <label>Base Case row</label>
+                  <select id="baseRowValue"></select>
+                </div>
+                <div class="form-field">
+                  <label>Applies to</label>
+                  <select id="appliesTo">
+                    <option value="ap">AP outflows</option>
+                    <option value="cashbook_debit">Cashbook debits</option>
+                    <option value="cashbook_credit">Cashbook credits</option>
+                    <option value="cashbook">Cashbook all</option>
+                    <option value="all">All sources</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Optional pay group filter</label>
+                  <input id="paygroupFilterValue">
+                </div>
+                <div class="form-field">
+                  <label>Notes</label>
+                  <textarea id="notesValue" rows="2"></textarea>
+                </div>
+                <div class="action-bar">
+                  <button class="btn btn-teal" id="saveRuleBtn">✓ Save Rule</button>
+                  <button class="btn btn-ghost" id="clearRuleBtn">Clear</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </section>
 
-    <section class="tabPanel" id="base">
-      <div class="panel"><h2>Base Case Summary</h2><div class="tablebox"><table id="baseTable"></table></div></div>
-    </section>
-
-    <section class="tabPanel" id="rules">
-      <div class="panel">
-        <h2>Saved Mapping Rules</h2>
-        <div class="search-row">
-          <input id="rulesSearch" placeholder="Filter by code, type, match value, category…" style="flex:1;min-width:200px">
-          <span class="hint" id="rulesCount"></span>
+      <!-- ── Base Case ── -->
+      <div class="tab-panel" id="base">
+        <div class="panel">
+          <div class="panel-head">Base Case Summary</div>
+          <div class="tablebox"><table id="baseTable"></table></div>
         </div>
-        <div class="tablebox tall"><table id="rulesTable"></table></div>
       </div>
-    </section>
 
-    <section class="tabPanel" id="audit">
-      <div class="panel"><h2>Audit Log</h2><div class="tablebox tall"><table id="auditTable"></table></div></div>
-    </section>
-
-    <section class="tabPanel" id="instructions">
-      <div class="panel prose">
-        <h2>Recommended Workflow</h2>
-        <ol>
-          <li>Enter your name in the header — it is recorded on every action in the audit log.</li>
-          <li>Select a month in the Month field, or pick a saved month from the dropdown and click <b>Load Month</b>.</li>
-          <li>Upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats).</li>
-          <li>Click <b>Process &amp; Save Month</b>. Raw source text and processed records are saved to Supabase. If the month already exists you will be prompted before overwriting.</li>
-          <li>The <b>Outflow Validation</b> tab is shown first. Review AP outflows by base case row and by category.</li>
-          <li>Switch to <b>Map Exceptions</b> to see unmapped or unrouted lines. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b>.</li>
-          <li>Use <b>Reapply Saved Rules</b> from the month panel at any time to rebuild the month from its saved uploads with the current rule set.</li>
-          <li>Export the Base Case as an Excel-compatible report when the month is finalised.</li>
-        </ol>
-        <h2>Procedure Logic Built In</h2>
-        <p>Default rules implement the procedure: purchase power (IPP), capital by FERC/FPC 18601 and 30000-39999, inventory 15401-15499, insurance 16501, Jameco vehicle lease, Office of Utilities regulatory fees, loan principal/interest/fees by FERC prefix 22/23/42, fuel by FERC and pay group, payroll by pay group, donations/sponsorships/foundations as Other, cashbook CI ranges (payroll 1-99, F/X 321-322, interest 352, bank charges 380/395, interest income 912), and JE27/JE09MA transfer logic.</p>
-        <h2>Notes</h2>
-        <ul>
-          <li>Cashbook debits are the receipt side (Collections row). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
-          <li>AP invoice/payment report is the primary source for categorising outflows.</li>
-          <li>Reset / Wipe removes all records and uploads for the month and logs the action. You will need to re-upload files to reprocess after a reset.</li>
-          <li>No login is required. Your name is captured from the header field and stored with every save and rule change in the audit log.</li>
-        </ul>
+      <!-- ── Rules ── -->
+      <div class="tab-panel" id="rules">
+        <div class="panel">
+          <div class="panel-head">
+            Saved Mapping Rules
+            <span class="hint" id="rulesCount"></span>
+          </div>
+          <div class="search-bar">
+            <input id="rulesSearch" placeholder="Filter by code, type, match value, category…">
+          </div>
+          <div class="tablebox tall"><table id="rulesTable"></table></div>
+        </div>
       </div>
-    </section>
-  </main>
+
+      <!-- ── Audit ── -->
+      <div class="tab-panel" id="audit">
+        <div class="panel">
+          <div class="panel-head">Audit Log</div>
+          <div class="tablebox tall"><table id="auditTable"></table></div>
+        </div>
+      </div>
+
+      <!-- ── Instructions ── -->
+      <div class="tab-panel" id="instructions">
+        <div class="panel prose">
+          <h2>Recommended Workflow</h2>
+          <ol>
+            <li>Enter your name on the welcome screen — it is recorded on every action in the audit log. Click your name badge in the header to change it.</li>
+            <li>Select a month in the Month field, or pick a saved month from the dropdown and click <b>Load Month</b>.</li>
+            <li>Upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats).</li>
+            <li>Click <b>Process &amp; Save Month</b>. Raw source text and processed records are saved to Supabase. If the month already exists you will be prompted before overwriting.</li>
+            <li>The <b>Outflow Validation</b> tab is shown first. Review AP outflows by base case row and by category.</li>
+            <li>Switch to <b>Map Exceptions</b> to see unmapped or unrouted lines. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b>.</li>
+            <li>Use <b>Reapply Rules</b> from the month panel at any time to rebuild the month from its saved uploads with the current rule set.</li>
+            <li>Export the Base Case as an Excel-compatible report when the month is finalised.</li>
+          </ol>
+          <h2>Procedure Logic Built In</h2>
+          <p>Default rules implement the procedure: purchase power (IPP), capital by FERC/FPC 18601 and 30000–39999, inventory 15401–15499, insurance 16501, Jameco vehicle lease, Office of Utilities regulatory fees, loan principal/interest/fees by FERC prefix 22/23/42, fuel by FERC and pay group, payroll by pay group, donations/sponsorships/foundations as Other, cashbook CI ranges (payroll 1–99, F/X 321–322, interest 352, bank charges 380/395, interest income 912), and JE27/JE09MA transfer logic.</p>
+          <h2>Notes</h2>
+          <ul>
+            <li>Cashbook debits are the receipt side (Collections row). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
+            <li>AP invoice/payment report is the primary source for categorising outflows.</li>
+            <li>Reset / Wipe removes all records and uploads for the month and logs the action. You will need to re-upload files to reprocess after a reset.</li>
+            <li>No login password is required. Your name is captured from the welcome screen and stored with every save and rule change in the audit log.</li>
+          </ul>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- /appShell -->
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./app.js"></script>
+  <script>
+    // ── Welcome screen logic ──────────────────────────────────────
+    (function () {
+      const welcomeScreen = document.getElementById("welcomeScreen");
+      const appShell      = document.getElementById("appShell");
+      const welcomeInput  = document.getElementById("welcomeNameInput");
+      const welcomeBtn    = document.getElementById("welcomeBtn");
+      const nameInput     = document.getElementById("nameInput");
+      const userAvatar    = document.getElementById("userAvatar");
+      const userNameDisp  = document.getElementById("userNameDisplay");
+      const userBadge     = document.getElementById("userBadge");
+
+      function initials(name) {
+        return name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join("");
+      }
+
+      function setUser(name) {
+        nameInput.value = name;
+        userAvatar.textContent = initials(name);
+        userNameDisp.textContent = name;
+        sessionStorage.setItem("cwbUser", name);
+      }
+
+      function launch(name) {
+        setUser(name);
+        welcomeScreen.classList.add("hiding");
+        setTimeout(() => {
+          welcomeScreen.style.display = "none";
+          appShell.classList.add("visible");
+        }, 440);
+      }
+
+      function tryLaunch() {
+        const name = welcomeInput.value.trim();
+        if (!name) {
+          welcomeInput.classList.add("shake");
+          welcomeInput.focus();
+          setTimeout(() => welcomeInput.classList.remove("shake"), 400);
+          return;
+        }
+        launch(name);
+      }
+
+      welcomeBtn.addEventListener("click", tryLaunch);
+      welcomeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") tryLaunch(); });
+
+      // Click the user badge in the header to change name (returns to welcome screen)
+      userBadge.addEventListener("click", () => {
+        welcomeInput.value = nameInput.value;
+        welcomeScreen.style.display = "";
+        welcomeScreen.classList.remove("hiding");
+        welcomeScreen.style.opacity = "";
+        appShell.classList.remove("visible");
+        setTimeout(() => welcomeInput.select(), 50);
+      });
+
+      // Pre-fill from previous session
+      const saved = sessionStorage.getItem("cwbUser");
+      if (saved) welcomeInput.value = saved;
+
+      welcomeInput.focus();
+    })();
+
+    // ── Status box adapter (maps app.js setStatus to pill styling) ─
+    (function () {
+      const box = document.getElementById("statusBox");
+      const observer = new MutationObserver(() => {
+        const span = box.querySelector("span");
+        if (!span) return;
+        box.className = "status-pill";
+        if (span.classList.contains("ok"))  box.classList.add("ok");
+        if (span.classList.contains("bad")) box.classList.add("bad");
+        box.textContent = span.textContent;
+      });
+      observer.observe(box, { childList: true, subtree: true });
+    })();
+
+    // ── Month bar adapter ─────────────────────────────────────────
+    // app.js sets innerHTML on #monthBar — we intercept via a MutationObserver
+    // and reformat it into the new structured layout.
+    (function () {
+      const bar     = document.getElementById("monthBar");
+      const barKey  = document.getElementById("monthBarKey");
+      const barMeta = document.getElementById("monthBarMeta");
+
+      const observer = new MutationObserver(() => {
+        // app.js sets bar.style.display and bar.innerHTML
+        // Parse what app.js wrote and reformat it
+        const raw = bar.innerHTML;
+        if (!raw || raw.includes("monthBarKey")) return; // already our template
+
+        // Extract text nodes / content from what app.js rendered
+        const tmp = document.createElement("div");
+        tmp.innerHTML = raw;
+        const text = tmp.textContent;
+
+        // Rebuild with our template
+        bar.innerHTML = "";
+        bar.innerHTML = `<div class="month-bar-dot"></div><strong id="monthBarKey"></strong><span class="sep">|</span><span class="meta" id="monthBarMeta"></span>`;
+
+        const parts = text.split("|").map(s => s.trim());
+        document.getElementById("monthBarKey").textContent = parts[0] || "";
+        document.getElementById("monthBarMeta").textContent = parts.slice(1).join(" · ") || "";
+      });
+
+      observer.observe(bar, { attributes: true, childList: true, subtree: true, attributeFilter: ["style"] });
+
+      // Toggle the visible class based on display style
+      const styleObs = new MutationObserver(() => {
+        bar.classList.toggle("visible", bar.style.display !== "none");
+      });
+      styleObs.observe(bar, { attributes: true, attributeFilter: ["style"] });
+    })();
+  </script>
 </body>
 </html>

@@ -52,6 +52,7 @@
   const timestamp = () => new Date().toISOString();
 
   function setStatus(text, kind) {
+    // Write a span so the MutationObserver in index.html can pick up the class
     const cls = kind === "error" ? "bad" : kind === "ok" ? "ok" : "";
     $("statusBox").innerHTML = `<span class="${cls}">${esc(text)}</span>`;
   }
@@ -288,9 +289,12 @@
 
   function renderMonthBar() {
     const bar = $("monthBar");
-    if (!state.loadedMonth) { bar.style.display = "none"; return; }
-    bar.style.display = "";
-    bar.innerHTML = `<strong>${esc(state.loadedMonth)}</strong><span class="sep">|</span>Last processed: ${esc(fmtDateTime(state.loadedAt))}${state.loadedBy ? ` <span class="sep">|</span> By: ${esc(state.loadedBy)}` : ""}`;
+    if (!state.loadedMonth) { bar.classList.remove("visible"); return; }
+    bar.classList.add("visible");
+    const key  = $("monthBarKey");
+    const meta = $("monthBarMeta");
+    if (key)  key.textContent  = state.loadedMonth;
+    if (meta) meta.textContent = `Last processed: ${fmtDateTime(state.loadedAt)}` + (state.loadedBy ? ` · By: ${state.loadedBy}` : "");
   }
 
   function renderKpis() {
@@ -304,15 +308,15 @@
     });
     const exc = unmapped + norow;
     const badge = $("excBadge");
-    if (badge) { badge.textContent = exc || ""; badge.className = "badge" + (exc ? " show" : ""); }
+    if (badge) { badge.textContent = exc || ""; badge.className = "tab-badge" + (exc ? " show" : ""); }
     $("kpis").innerHTML = [
-      ["AP Outflows (US$)", money(ap), ""],
-      ["Cashbook Debits (US$)", money(cd), ""],
-      ["Cashbook Credits (US$)", money(cc), ""],
-      ["Unmapped", unmapped, unmapped ? "bad-kpi" : ""],
-      ["No Base Row", norow, norow ? "warn-kpi" : ""],
-      ["Total Exceptions", exc, exc ? "bad-kpi" : ""]
-    ].map(([k, v, cls]) => `<div class="kpi ${cls}"><span>${k}</span><b>${v}</b></div>`).join("");
+      ["AP Outflows", "US$ " + money(ap), "💸", ""],
+      ["Cashbook Debits", "US$ " + money(cd), "📥", ""],
+      ["Cashbook Credits", "US$ " + money(cc), "📤", ""],
+      ["Unmapped", String(unmapped), "⚠️", unmapped ? "bad" : "good"],
+      ["No Base Row", String(norow), "🔗", norow ? "warn" : "good"],
+      ["Total Exceptions", String(exc), "🚩", exc ? "bad" : "good"]
+    ].map(([label, val, icon, cls]) => `<div class="kpi-tile ${cls}"><div class="kpi-label">${label}</div><div class="kpi-icon">${icon}</div><div class="kpi-value">${val}</div></div>`).join("");
   }
 
   function renderBase() {
@@ -399,7 +403,7 @@
   // Only render the currently visible data tab; mark the rest pending so they render when clicked.
   const pendingRender = new Set();
   function activeTabName() {
-    const btn = document.querySelector(".tab.active");
+    const btn = document.querySelector(".tab-btn.active");
     return btn ? btn.dataset.tab : "outflows";
   }
   function renderDataTab(name) {
@@ -669,11 +673,11 @@
 
   function showReapplyPrompt() {
     const p = $("reapplyPrompt");
-    if (p) p.style.display = "";
+    if (p) p.classList.add("visible");
   }
   function hideReapplyPrompt() {
     const p = $("reapplyPrompt");
-    if (p) p.style.display = "none";
+    if (p) p.classList.remove("visible");
   }
 
   function prefillRule(recordKey) {
@@ -688,7 +692,7 @@
     $("paygroupFilterValue").value = "";
     $("notesValue").value = `Created from ${recordKey}`;
     // Switch to exceptions tab (rule form is in the right panel) and scroll rule form into view
-    document.querySelector('[data-tab="exceptions"]').click();
+    document.querySelector('.tab-btn[data-tab="exceptions"]').click();
     setTimeout(() => $("matchValue").focus(), 50);
   }
 
@@ -703,7 +707,7 @@
     $("appliesTo").value = rule.applies_to;
     $("paygroupFilterValue").value = rule.paygroup_filter || "";
     $("notesValue").value = rule.notes || "";
-    document.querySelector('[data-tab="exceptions"]').click();
+    document.querySelector('.tab-btn[data-tab="exceptions"]').click();
     setTimeout(() => $("matchValue").focus(), 50);
   }
 
@@ -790,9 +794,9 @@
   }
 
   function bindTabs() {
-    document.querySelectorAll(".tab").forEach((btn) => {
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab,.tabPanel").forEach((x) => x.classList.remove("active"));
+        document.querySelectorAll(".tab-btn,.tab-panel").forEach((x) => x.classList.remove("active"));
         btn.classList.add("active");
         $(btn.dataset.tab).classList.add("active");
         // Render this tab if its data is stale
