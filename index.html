@@ -5,17 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cashflow Workbench</title>
   <style>
-    :root{--ink:#17202a;--muted:#5e6875;--line:#d9e0e8;--soft:#f6f8fb;--blue:#174a7c;--green:#0f766e;--red:#b91c1c;--gold:#8a5b00}
+    :root{--ink:#17202a;--muted:#5e6875;--line:#d9e0e8;--soft:#f6f8fb;--blue:#174a7c;--green:#0f766e;--red:#b91c1c;--gold:#8a5b00;--amber:#92400e}
     *{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:var(--ink);background:#fff;font-size:14px}
-    header{padding:20px 24px;border-bottom:1px solid var(--line);background:#f8fafc;display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
-    h1{margin:0 0 4px;font-size:25px}p{margin:0;color:var(--muted)}main{padding:18px 24px;max-width:1680px;margin:auto}
-    .panel{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:14px}.panel h2{font-size:16px;margin:0;padding:12px 14px;background:var(--soft);border-bottom:1px solid var(--line)}.panel>*:not(h2){margin:12px 14px}
+    header{padding:16px 24px;border-bottom:1px solid var(--line);background:#f8fafc;display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+    h1{margin:0 0 4px;font-size:22px}p{margin:0;color:var(--muted)}main{padding:16px 24px;max-width:1680px;margin:auto}
+    .panel{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:12px}.panel h2{font-size:15px;margin:0;padding:10px 14px;background:var(--soft);border-bottom:1px solid var(--line);border-radius:8px 8px 0 0}.panel>*:not(h2){margin:10px 14px}
     .grid{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:10px}.split{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}.triple{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-    .kpis{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin-bottom:14px}.kpi{border:1px solid var(--line);border-radius:8px;padding:11px;background:#fff}.kpi b{display:block;font-size:19px;margin-top:4px}
-    label{display:flex;flex-direction:column;gap:4px;color:var(--muted)}button,input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;background:white;padding:8px 10px}button{cursor:pointer}.primary{background:var(--blue);border-color:var(--blue);color:white}.good{background:var(--green);border-color:var(--green);color:white}.danger{background:#fff5f5;border-color:#fecaca;color:var(--red)}.warn{background:#fffbeb;border-color:#fcd34d;color:var(--gold)}
-    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tab.active{background:var(--blue);color:white;border-color:var(--blue)}.tabPanel{display:none}.tabPanel.active{display:block}
-    .tablebox{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:8px}.tablebox.tall{max-height:66vh}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}th{position:sticky;top:0;background:#edf3f8}.num{text-align:right;font-variant-numeric:tabular-nums}
-    .hint{font-size:12px;color:var(--muted)}.stack{display:grid;gap:10px}.prose{line-height:1.55;max-width:980px}.status{min-width:220px;text-align:right;color:var(--muted);font-size:12px}.pill{display:inline-block;border-radius:999px;padding:2px 8px;background:#eef3f8}.bad{font-weight:700;color:var(--red)}.ok{font-weight:700;color:var(--green)}.setup{background:#fff8e6;border-color:#f5d28a}
+    .kpis{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px;margin-bottom:12px}.kpi{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}.kpi b{display:block;font-size:18px;margin-top:3px}.kpi.warn-kpi b{color:var(--gold)}.kpi.bad-kpi b{color:var(--red)}
+    label{display:flex;flex-direction:column;gap:4px;color:var(--muted)}button,input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;background:white;padding:7px 10px}button{cursor:pointer}.primary{background:var(--blue);border-color:var(--blue);color:white}.good{background:var(--green);border-color:var(--green);color:white}.danger{background:#fff5f5;border-color:#fecaca;color:var(--red)}.warn{background:#fffbeb;border-color:#fcd34d;color:var(--gold)}button:disabled{opacity:.45;cursor:default}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tab{position:relative}.tab.active{background:var(--blue);color:white;border-color:var(--blue)}.tab .badge{position:absolute;top:-7px;right:-7px;background:var(--red);color:#fff;border-radius:999px;font-size:10px;padding:1px 5px;line-height:1.5;display:none}.tab .badge.show{display:block}.tabPanel{display:none}.tabPanel.active{display:block}
+    .tablebox{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:8px}.tablebox.tall{max-height:66vh}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{position:sticky;top:0;background:#edf3f8;font-size:11px;text-transform:uppercase;letter-spacing:.03em}.num{text-align:right;font-variant-numeric:tabular-nums}tr:hover td{background:#f8fafc}
+    .hint{font-size:12px;color:var(--muted)}.stack{display:grid;gap:8px}.prose{line-height:1.55;max-width:980px}.status{min-width:220px;text-align:right;color:var(--muted);font-size:12px}.pill{display:inline-block;border-radius:999px;padding:2px 8px;background:#eef3f8;font-size:11px}.bad{font-weight:700;color:var(--red)}.ok{font-weight:700;color:var(--green)}.setup{background:#fff8e6;border-color:#f5d28a}
+    .month-bar{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:13px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+    .month-bar strong{color:var(--blue)}.month-bar .sep{color:var(--line)}
+    .exc-badge{display:inline-block;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600}
+    .exc-badge.unmapped{background:#fee2e2;color:var(--red)}.exc-badge.norow{background:#fef3c7;color:var(--amber)}.exc-badge.ok{background:#d1fae5;color:var(--green)}
+    .reapply-prompt{background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:9px 12px;display:flex;gap:10px;align-items:center;font-size:13px;margin-bottom:4px}
+    .search-row{display:flex;gap:8px;align-items:center;margin-bottom:4px}
     @media(max-width:1100px){header{display:block}.grid,.split,.triple,.kpis{grid-template-columns:1fr}.tablebox{max-height:52vh}}
   </style>
 </head>
@@ -23,15 +29,15 @@
   <header>
     <div>
       <h1>Cashflow Workbench</h1>
-      <p>Supabase-backed cashflow mapper for AP outflows, cashbook validation, month storage, audit logging, and shared rule maintenance.</p>
+      <p>Supabase-backed cashflow mapper — AP outflows, cashbook validation, month storage, audit logging.</p>
     </div>
     <div class="status" id="statusBox">Checking configuration...</div>
   </header>
   <main>
-    <section class="panel setup" id="setupPanel">
+    <section class="panel setup" id="setupPanel" style="display:none">
       <h2>Supabase Setup</h2>
       <div class="prose">
-        <p>This app expects a local <code>config.js</code> with your Supabase project URL and anon key. Use the included <code>config.example.js</code> as the template, then run the SQL in <code>supabase/schema.sql</code>.</p>
+        <p>Add a <code>config.js</code> with your Supabase project URL and anon key (use <code>config.example.js</code> as the template), then run the SQL in <code>supabase/schema.sql</code>.</p>
       </div>
     </section>
 
@@ -45,7 +51,7 @@
         <button class="primary" id="signInBtn">Sign In</button>
         <button id="signUpBtn">Create User</button>
         <button id="signOutBtn" style="display:none">Sign Out</button>
-        <span class="hint" id="authHint">Use Supabase Auth email/password users for the team.</span>
+        <span class="hint" id="authHint">Use Supabase Auth email/password users.</span>
       </div>
     </section>
 
@@ -55,42 +61,41 @@
         <label>Month <input id="monthInput" type="month"></label>
         <label>Saved months <select id="monthSelect"></select></label>
         <label>AP invoice/payment report <input id="apFile" type="file" accept=".txt,.csv"></label>
-        <label>Cashbook description export (180) <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv"></label>
-        <label>Cashbook account export (132) <input id="cashbookAccountFile" type="file" accept=".txt,.csv"></label>
+        <label>Cashbook description (180) <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv"></label>
+        <label>Cashbook account (132) <input id="cashbookAccountFile" type="file" accept=".txt,.csv"></label>
         <label>Optional rules import CSV <input id="mappingFile" type="file" accept=".csv"></label>
       </div>
       <div class="toolbar">
-        <button class="primary" id="processBtn">Process And Save Month</button>
+        <button class="primary" id="processBtn">Process &amp; Save Month</button>
         <button id="loadMonthBtn">Load Month</button>
         <button id="reapplyBtn">Reapply Saved Rules</button>
-        <button class="danger" id="resetBtn">Reset/Wipe Month</button>
+        <button class="danger" id="resetBtn">Reset / Wipe Month</button>
+        <span style="flex:1"></span>
         <button id="exportRecordsBtn">Export Records CSV</button>
         <button id="exportRulesBtn">Export Rules CSV</button>
-        <button id="exportReportBtn">Export Excel-Compatible Report</button>
+        <button id="exportReportBtn">Export Excel Report</button>
       </div>
-      <p class="hint">Source files are stored as text in Supabase so the month can be reprocessed with updated rules. Reset wipes the month data from the live app tables and logs the action.</p>
+      <p class="hint">Source files are stored in Supabase so the month can be reprocessed. Reset wipes the month data and logs the action.</p>
     </section>
+
+    <div class="month-bar" id="monthBar" style="display:none"></div>
 
     <section class="kpis" id="kpis"></section>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="base">Base Case</button>
-      <button class="tab" data-tab="outflows">Outflow Validation</button>
-      <button class="tab" data-tab="exceptions">Map Exceptions</button>
+      <button class="tab active" data-tab="outflows">Outflow Validation</button>
+      <button class="tab" data-tab="exceptions">Map Exceptions <span class="badge" id="excBadge"></span></button>
+      <button class="tab" data-tab="base">Base Case</button>
       <button class="tab" data-tab="rules">Rules</button>
       <button class="tab" data-tab="audit">Audit</button>
       <button class="tab" data-tab="instructions">Instructions</button>
     </nav>
 
-    <section class="tabPanel active" id="base">
-      <div class="panel"><h2>Base Case Summary</h2><div class="tablebox"><table id="baseTable"></table></div></div>
-    </section>
-
-    <section class="tabPanel" id="outflows">
+    <section class="tabPanel active" id="outflows">
       <div class="triple">
-        <div class="panel"><h2>AP Outflows By Base Case Row</h2><div class="tablebox"><table id="outflowBaseTable"></table></div></div>
-        <div class="panel"><h2>AP Outflows By Category</h2><div class="tablebox"><table id="outflowCategoryTable"></table></div></div>
-        <div class="panel"><h2>Cashbook Check</h2><div class="tablebox"><table id="cashbookCheckTable"></table></div></div>
+        <div class="panel"><h2>AP Outflows — By Base Case Row</h2><div class="tablebox"><table id="outflowBaseTable"></table></div></div>
+        <div class="panel"><h2>AP Outflows — By Category</h2><div class="tablebox"><table id="outflowCategoryTable"></table></div></div>
+        <div class="panel"><h2>Cashbook Summary</h2><div class="tablebox"><table id="cashbookCheckTable"></table></div></div>
       </div>
     </section>
 
@@ -99,7 +104,7 @@
         <div class="panel">
           <h2>Exceptions / Unmapped Lines</h2>
           <div class="toolbar">
-            <input id="searchInput" placeholder="Search vendor, pay group, FPC, description">
+            <input id="searchInput" placeholder="Search vendor, pay group, FPC, description" style="flex:1;min-width:180px">
             <select id="sourceFilter">
               <option value="ap">AP outflows</option>
               <option value="cashbook_debit">Cashbook debits</option>
@@ -111,6 +116,11 @@
         </div>
         <div class="panel">
           <h2>Add / Edit Rule</h2>
+          <div id="reapplyPrompt" class="reapply-prompt" style="display:none">
+            <span>Rule saved — rebuild this month with the updated rules?</span>
+            <button class="warn" id="promptReapplyBtn">Reapply Now</button>
+            <button id="promptDismissBtn" style="font-size:11px">Dismiss</button>
+          </div>
           <div class="stack">
             <label>Rule code <input id="ruleCodeValue" placeholder="Auto-generated for new rules"></label>
             <label>Rule type
@@ -124,7 +134,7 @@
                 <option value="cashbook_cost_range">Cashbook cost item range</option>
               </select>
             </label>
-            <label>Match value <input id="matchValue" placeholder="Examples: JAMECO, 16501, 30000-39999, 321-322"></label>
+            <label>Match value <input id="matchValue" placeholder="e.g. JAMECO, 16501, 30000-39999, 321-322"></label>
             <label>Category <input id="categoryValue"></label>
             <label>Base Case row <select id="baseRowValue"></select></label>
             <label>Applies to
@@ -137,19 +147,29 @@
               </select>
             </label>
             <label>Optional pay group filter <input id="paygroupFilterValue"></label>
-            <label>Notes <textarea id="notesValue"></textarea></label>
+            <label>Notes <textarea id="notesValue" rows="2"></textarea></label>
             <div class="toolbar">
               <button class="good" id="saveRuleBtn">Save Rule</button>
               <button id="clearRuleBtn">Clear</button>
             </div>
-            <p class="hint">Save the rule, then use <b>Reapply Saved Rules</b> to rebuild the selected month from the saved uploads.</p>
           </div>
         </div>
       </div>
     </section>
 
+    <section class="tabPanel" id="base">
+      <div class="panel"><h2>Base Case Summary</h2><div class="tablebox"><table id="baseTable"></table></div></div>
+    </section>
+
     <section class="tabPanel" id="rules">
-      <div class="panel"><h2>Saved Mapping Rules</h2><div class="tablebox tall"><table id="rulesTable"></table></div></div>
+      <div class="panel">
+        <h2>Saved Mapping Rules</h2>
+        <div class="search-row">
+          <input id="rulesSearch" placeholder="Filter by code, type, match value, category…" style="flex:1;min-width:200px">
+          <span class="hint" id="rulesCount"></span>
+        </div>
+        <div class="tablebox tall"><table id="rulesTable"></table></div>
+      </div>
     </section>
 
     <section class="tabPanel" id="audit">
@@ -160,16 +180,24 @@
       <div class="panel prose">
         <h2>Recommended Workflow</h2>
         <ol>
-          <li>Sign in with a Supabase user.</li>
-          <li>Select or create the month.</li>
-          <li>Upload the AP invoice/payment report and the two cashbook text exports.</li>
-          <li>Click <b>Process And Save Month</b>. The raw source text and processed records are saved to Supabase.</li>
-          <li>Review <b>Outflow Validation</b> and then clear exceptions in <b>Map Exceptions</b>.</li>
-          <li>Save rule changes. The app writes them to Supabase and logs the change.</li>
-          <li>Use <b>Reapply Saved Rules</b> to rebuild the month from the saved uploads after rule changes.</li>
+          <li>Sign in with your Supabase user account.</li>
+          <li>Select a month in the Month field, or pick a saved month from the dropdown and click <b>Load Month</b>.</li>
+          <li>Upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats).</li>
+          <li>Click <b>Process &amp; Save Month</b>. Raw source text and processed records are saved to Supabase. If the month already exists you will be prompted before overwriting.</li>
+          <li>The <b>Outflow Validation</b> tab is shown first. Review AP outflows by base case row and by category.</li>
+          <li>Switch to <b>Map Exceptions</b> to see unmapped or unrouted lines. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b>.</li>
+          <li>Use <b>Reapply Saved Rules</b> from the month panel at any time to rebuild the month from its saved uploads with the current rule set.</li>
+          <li>Export the Base Case as an Excel-compatible report when the month is finalised.</li>
         </ol>
         <h2>Procedure Logic Built In</h2>
-        <p>Default rules follow your procedure: capital and inventory by FERC/FPC ranges, insurance 16501, Jameco, Office of Utilities, loan principal/interest/fees by FERC prefix, fuel by FERC and pay group, donation/sponsorship/foundation as Other, cheque categories, and cashbook CI logic. You can still override or extend these rules in the app.</p>
+        <p>Default rules implement the procedure: purchase power (IPP), capital by FERC/FPC 18601 and 30000-39999, inventory 15401-15499, insurance 16501, Jameco vehicle lease, Office of Utilities regulatory fees, loan principal/interest/fees by FERC prefix 22/23/42, fuel by FERC and pay group, payroll by pay group, donations/sponsorships/foundations as Other, cashbook CI ranges (payroll 1-99, F/X 321-322, interest 352, bank charges 380/395, interest income 912), and JE27/JE09MA transfer logic.</p>
+        <h2>Notes</h2>
+        <ul>
+          <li>Cashbook debits are the receipt side (Collections row). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
+          <li>AP invoice/payment report is the primary source for categorising outflows.</li>
+          <li>Reset / Wipe removes all records and uploads for the month and logs the action. You will need to re-upload files to reprocess after a reset.</li>
+          <li>To prevent public sign-ups, disable them in your Supabase project: Authentication → Settings → Disable sign-ups.</li>
+        </ul>
       </div>
     </section>
   </main>

@@ -77,6 +77,19 @@ create table if not exists public.cashflow_audit_log (
   created_at timestamptz not null default now()
 );
 
+-- Indexes for query performance on records (the largest table)
+create index if not exists cashflow_records_month_id_idx on public.cashflow_records(month_id);
+create index if not exists cashflow_records_mapped_idx on public.cashflow_records(month_id, mapped);
+create index if not exists cashflow_records_data_source_idx on public.cashflow_records(month_id, data_source);
+create index if not exists cashflow_records_base_case_row_idx on public.cashflow_records(month_id, base_case_row);
+
+-- Index for uploads lookup by month
+create index if not exists cashflow_source_uploads_month_id_idx on public.cashflow_source_uploads(month_id);
+
+-- Index for audit log queries (newest first)
+create index if not exists cashflow_audit_log_created_at_idx on public.cashflow_audit_log(created_at desc);
+create index if not exists cashflow_audit_log_month_key_idx on public.cashflow_audit_log(month_key);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -99,6 +112,7 @@ alter table public.cashflow_rules enable row level security;
 alter table public.cashflow_records enable row level security;
 alter table public.cashflow_audit_log enable row level security;
 
+-- RLS: all authenticated users have full access (shared team workbench, no per-user row isolation needed)
 drop policy if exists "authenticated full access months" on public.cashflow_months;
 create policy "authenticated full access months" on public.cashflow_months for all to authenticated using (true) with check (true);
 drop policy if exists "authenticated full access uploads" on public.cashflow_source_uploads;
