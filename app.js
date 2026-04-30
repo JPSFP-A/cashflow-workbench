@@ -38,9 +38,12 @@
   ];
 
   const state = {
-    supabase: null, user: null, rules: [], records: [], uploads: {}, months: [], audit: [],
+    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
     loadedMonth: null, loadedAt: null, loadedBy: null, busy: false
   };
+
+  // Returns the name typed in the header field, falling back to "Anonymous"
+  function userName() { return ($("nameInput") && $("nameInput").value.trim()) || "Anonymous"; }
 
   const $ = (id) => document.getElementById(id);
   const money = (v) => fmt.format(Number(v || 0));
@@ -389,7 +392,7 @@
       { label: "Month", key: "month_key" },
       { label: "Rule", key: "rule_code" },
       { label: "Details", key: "details" },
-      { label: "By", key: "user_email" }
+      { label: "By", key: "user_name" }
     ], state.audit);
   }
 
@@ -422,44 +425,17 @@
     return true;
   }
 
-  async function refreshSession() {
+  async function init() {
     if (!(await ensureSupabase())) return;
-    const { data } = await state.supabase.auth.getSession();
-    state.user = data.session ? data.session.user : null;
-    $("signOutBtn").style.display = state.user ? "" : "none";
-    $("authHint").textContent = state.user ? `Signed in as ${state.user.email}` : "Use Supabase Auth email/password users.";
-    setStatus(state.user ? `Connected as ${state.user.email}` : "Ready to sign in.", state.user ? "ok" : "");
-    if (state.user) await Promise.all([loadRules(true), loadMonths(), loadAudit()]);
-  }
-
-  async function signIn() {
-    if (!(await ensureSupabase())) return;
-    setStatus("Signing in…", "");
-    const { error } = await state.supabase.auth.signInWithPassword({ email: $("emailInput").value, password: $("passwordInput").value });
-    if (error) return setStatus(error.message, "error");
-    await refreshSession();
-  }
-
-  async function signUp() {
-    if (!(await ensureSupabase())) return;
-    const { error } = await state.supabase.auth.signUp({ email: $("emailInput").value, password: $("passwordInput").value });
-    if (error) return setStatus(error.message, "error");
-    setStatus("User created. Check email confirmation settings in Supabase if required.", "ok");
-  }
-
-  async function signOut() {
-    if (!state.supabase) return;
-    await state.supabase.auth.signOut();
-    state.user = null; state.records = []; state.audit = []; state.loadedMonth = null;
-    renderAll();
-    await refreshSession();
+    setStatus("Connected.", "ok");
+    await Promise.all([loadRules(true), loadMonths(), loadAudit()]);
   }
 
   async function loadRules(seedIfEmpty = true) {
     const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("rule_code");
     if (error) return setStatus(error.message, "error");
     if ((!data || !data.length) && seedIfEmpty) {
-      const rows = defaultRules.map((r) => ({ ...r, created_by: state.user.id, updated_by: state.user.id }));
+      const rows = defaultRules.map((r) => ({ ...r, created_by: userName(), updated_by: userName() }));
       const { error: seedError } = await state.supabase.from("cashflow_rules").insert(rows);
       if (seedError) return setStatus(seedError.message, "error");
       return loadRules(false);
@@ -476,7 +452,7 @@
   }
 
   async function loadAudit() {
-    const { data, error } = await state.supabase.from("cashflow_audit_log").select("created_at,action,month_key,rule_code,details,user_email").order("created_at", { ascending: false }).limit(200);
+    const { data, error } = await state.supabase.from("cashflow_audit_log").select("created_at,action,month_key,rule_code,details,user_name").order("created_at", { ascending: false }).limit(200);
     if (error) return setStatus(error.message, "error");
     state.audit = data || [];
     renderAudit();
@@ -493,8 +469,8 @@
       paygroup_filter: r.paygroup_filter || "",
       notes: r.notes || "",
       active: String(r.active || "true").toLowerCase() !== "false",
-      updated_by: state.user.id,
-      created_by: state.user.id
+      created_by: userName(),
+      updated_by: userName()
     }));
     if (!parsed.length) return;
     const { error } = await state.supabase.from("cashflow_rules").upsert(parsed, { onConflict: "rule_code" });
@@ -504,17 +480,17 @@
   }
 
   async function auditLog(action, monthKey, ruleCode, details) {
-    if (!state.user) return;
-    await state.supabase.from("cashflow_audit_log").insert([{ action, month_key: monthKey || null, rule_code: ruleCode || null, details, user_id: state.user.id, user_email: state.user.email }]);
+    if (!state.supabase) return;
+    await state.supabase.from("cashflow_audit_log").insert([{ action, month_key: monthKey || null, rule_code: ruleCode || null, details, user_name: userName() }]);
   }
 
   async function saveMonthToDb(monthKey, uploads, records) {
-    const upsertMonth = await state.supabase.from("cashflow_months").upsert([{ month_key: monthKey, last_processed_at: timestamp(), processed_by: state.user.id }], { onConflict: "month_key" }).select("id,last_processed_at").single();
+    const upsertMonth = await state.supabase.from("cashflow_months").upsert([{ month_key: monthKey, last_processed_at: timestamp(), processed_by: userName() }], { onConflict: "month_key" }).select("id,last_processed_at").single();
     if (upsertMonth.error) throw upsertMonth.error;
     const monthId = upsertMonth.data.id;
     await state.supabase.from("cashflow_source_uploads").delete().eq("month_id", monthId);
     await state.supabase.from("cashflow_records").delete().eq("month_id", monthId);
-    const uploadRows = Object.entries(uploads).filter(([, content]) => content).map(([source_type, content]) => ({ month_id: monthId, source_type, file_name: `${source_type}.txt`, content_text: content, created_by: state.user.id }));
+    const uploadRows = Object.entries(uploads).filter(([, content]) => content).map(([source_type, content]) => ({ month_id: monthId, source_type, file_name: `${source_type}.txt`, content_text: content, created_by: userName() }));
     if (uploadRows.length) {
       const { error } = await state.supabase.from("cashflow_source_uploads").insert(uploadRows);
       if (error) throw error;
@@ -530,11 +506,10 @@
     await auditLog("process_month", monthKey, "", `Saved ${records.length} processed records`);
     state.loadedMonth = monthKey;
     state.loadedAt = upsertMonth.data.last_processed_at || timestamp();
-    state.loadedBy = state.user.email;
+    state.loadedBy = userName();
   }
 
   async function processAndSaveMonth() {
-    if (!state.user) return setStatus("Sign in first.", "error");
     if (state.busy) return;
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a month first.", "error");
@@ -570,7 +545,6 @@
   }
 
   async function loadMonth() {
-    if (!state.user) return setStatus("Sign in first.", "error");
     if (state.busy) return;
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a saved month first.", "error");
@@ -598,7 +572,6 @@
   }
 
   async function reapplySavedRules() {
-    if (!state.user) return setStatus("Sign in first.", "error");
     if (state.busy) return;
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a month first.", "error");
@@ -628,7 +601,6 @@
   }
 
   async function resetMonth() {
-    if (!state.user) return setStatus("Sign in first.", "error");
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a month first.", "error");
     if (!confirm(`Reset / wipe ALL data for ${monthKey} from the live app tables? This cannot be undone.`)) return;
@@ -699,7 +671,6 @@
   }
 
   async function saveRule() {
-    if (!state.user) return setStatus("Sign in first.", "error");
     const code = $("ruleCodeValue").value.trim();
     const rule = {
       rule_code: code || nextRuleCode(),
@@ -711,8 +682,8 @@
       paygroup_filter: $("paygroupFilterValue").value.trim(),
       notes: $("notesValue").value.trim(),
       active: true,
-      created_by: state.user.id,
-      updated_by: state.user.id
+      created_by: userName(),
+      updated_by: userName()
     };
     if (!rule.match_value || !rule.category) return setStatus("Match value and category are required.", "error");
     const { error } = await state.supabase.from("cashflow_rules").upsert([rule], { onConflict: "rule_code" });
@@ -726,7 +697,6 @@
   }
 
   async function deleteRule(ruleCode) {
-    if (!state.user) return setStatus("Sign in first.", "error");
     if (!confirm(`Delete rule ${ruleCode}?`)) return;
     const { error } = await state.supabase.from("cashflow_rules").delete().eq("rule_code", ruleCode);
     if (error) return setStatus(error.message, "error");
@@ -788,9 +758,6 @@
     $("baseRowValue").innerHTML = `<option value="">Leave unassigned</option>${baseRows.map((r) => `<option>${esc(r)}</option>`).join("")}`;
     $("monthInput").value = new Date().toISOString().slice(0, 7);
     bindTabs();
-    $("signInBtn").addEventListener("click", signIn);
-    $("signUpBtn").addEventListener("click", signUp);
-    $("signOutBtn").addEventListener("click", signOut);
     $("processBtn").addEventListener("click", processAndSaveMonth);
     $("loadMonthBtn").addEventListener("click", loadMonth);
     $("reapplyBtn").addEventListener("click", reapplySavedRules);
@@ -808,7 +775,7 @@
   }
 
   bindUi();
-  refreshSession();
+  init();
 
   window.cashflowApp = { prefillRule, loadRule, deleteRule };
 })();

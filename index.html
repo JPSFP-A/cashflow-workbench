@@ -31,27 +31,18 @@
       <h1>Cashflow Workbench</h1>
       <p>Supabase-backed cashflow mapper — AP outflows, cashbook validation, month storage, audit logging.</p>
     </div>
-    <div class="status" id="statusBox">Checking configuration...</div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="flex-direction:row;gap:8px;align-items:center;margin:0;color:var(--muted);white-space:nowrap">
+        Your name&nbsp;<input id="nameInput" placeholder="e.g. Jane Smith" style="width:160px;padding:6px 10px">
+      </label>
+      <div class="status" id="statusBox">Checking configuration...</div>
+    </div>
   </header>
   <main>
     <section class="panel setup" id="setupPanel" style="display:none">
       <h2>Supabase Setup</h2>
       <div class="prose">
         <p>Add a <code>config.js</code> with your Supabase project URL and anon key (use <code>config.example.js</code> as the template), then run the SQL in <code>supabase/schema.sql</code>.</p>
-      </div>
-    </section>
-
-    <section class="panel" id="authPanel">
-      <h2>Sign In</h2>
-      <div class="grid">
-        <label>Email <input id="emailInput" type="email" placeholder="team@example.com"></label>
-        <label>Password <input id="passwordInput" type="password" placeholder="Password"></label>
-      </div>
-      <div class="toolbar">
-        <button class="primary" id="signInBtn">Sign In</button>
-        <button id="signUpBtn">Create User</button>
-        <button id="signOutBtn" style="display:none">Sign Out</button>
-        <span class="hint" id="authHint">Use Supabase Auth email/password users.</span>
       </div>
     </section>
 
@@ -180,7 +171,7 @@
       <div class="panel prose">
         <h2>Recommended Workflow</h2>
         <ol>
-          <li>Sign in with your Supabase user account.</li>
+          <li>Enter your name in the header — it is recorded on every action in the audit log.</li>
           <li>Select a month in the Month field, or pick a saved month from the dropdown and click <b>Load Month</b>.</li>
           <li>Upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats).</li>
           <li>Click <b>Process &amp; Save Month</b>. Raw source text and processed records are saved to Supabase. If the month already exists you will be prompted before overwriting.</li>
@@ -196,7 +187,7 @@
           <li>Cashbook debits are the receipt side (Collections row). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
           <li>AP invoice/payment report is the primary source for categorising outflows.</li>
           <li>Reset / Wipe removes all records and uploads for the month and logs the action. You will need to re-upload files to reprocess after a reset.</li>
-          <li>To prevent public sign-ups, disable them in your Supabase project: Authentication → Settings → Disable sign-ups.</li>
+          <li>No login is required. Your name is captured from the header field and stored with every save and rule change in the audit log.</li>
         </ul>
       </div>
     </section>
