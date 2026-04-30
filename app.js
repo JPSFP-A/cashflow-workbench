@@ -279,17 +279,20 @@
     });
   }
 
-  function group(rows, key) {
+  // signed=true  → use signed_amount (negative for outflows) — for base case / net totals
+  // signed=false → use amount (absolute)                     — for outflow analysis tabs
+  function group(rows, key, signed = false) {
     const map = new Map();
     rows.forEach((r) => {
       const name = r[key] || "(Unassigned)";
       const item = map.get(name) || { name, amount: 0, lines: 0, unmapped: 0 };
-      item.amount += Number(r.amount || 0);
+      item.amount += Number(signed ? (r.signed_amount ?? r.amount ?? 0) : (r.amount || 0));
       item.lines += 1;
       if (!r.mapped) item.unmapped += 1;
       map.set(name, item);
     });
-    return [...map.values()].sort((a, b) => b.amount - a.amount);
+    // Sort: largest absolute value first so both big inflows and big outflows surface
+    return [...map.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   }
 
   function sourceOk(row) {
@@ -339,14 +342,30 @@
   }
 
   function renderBase() {
-    const heads = [
-      { label: "Base Case Row", key: "name" },
-      { label: "US$ Amount", key: "amount", num: true, render: (r) => money(r.amount) },
-      { label: "US$’000", key: "amount", num: true, render: (r) => money(r.amount / 1000) },
-      { label: "Lines", key: "lines", num: true },
-      { label: "Unmapped", key: "unmapped", num: true, render: (r) => r.unmapped ? `<span class="bad">${r.unmapped}</span>` : "0" }
+    const grouped = group(state.records.filter((r) => r.base_case_row), "base_case_row", true);
+    const byName  = new Map(grouped.map((g) => [g.name, g]));
+    // Show rows in canonical baseRows order, then any extras not in that list
+    const ordered = [
+      ...baseRows.filter((r) => byName.has(r)).map((r) => byName.get(r)),
+      ...grouped.filter((g) => !baseRows.includes(g.name))
     ];
-    table("baseTable", heads, group(state.records.filter((r) => r.base_case_row), "base_case_row"));
+    // Append a NET row
+    const net = ordered.reduce((s, r) => s + r.amount, 0);
+    const netRow = { name: "NET CASH FLOW", amount: net, lines: null, unmapped: null };
+
+    const heads = [
+      { label: "Base Case Row", key: "name",
+        render: (r) => r.name === "NET CASH FLOW"
+          ? `<strong style="color:var(--navy)">${esc(r.name)}</strong>`
+          : esc(r.name) },
+      { label: "US$ Amount", key: "amount", num: true,
+        render: (r) => `<span style="color:${r.amount < 0 ? "var(--red)" : r.name === "NET CASH FLOW" ? "var(--teal)" : "inherit"}">${money(r.amount)}</span>` },
+      { label: "US$’000",    key: "amount", num: true,
+        render: (r) => `<span style="color:${r.amount < 0 ? "var(--red)" : r.name === "NET CASH FLOW" ? "var(--teal)" : "inherit"}">${money(r.amount / 1000)}</span>` },
+      { label: "Lines",    key: "lines",    num: true, render: (r) => r.lines    != null ? String(r.lines)    : "" },
+      { label: "Unmapped", key: "unmapped", num: true, render: (r) => r.unmapped != null ? (r.unmapped ? `<span class="bad">${r.unmapped}</span>` : "0") : "" }
+    ];
+    table("baseTable", heads, [...ordered, netRow]);
   }
 
   function renderOutflows() {
@@ -994,13 +1013,13 @@
       const monthMap = new Map((mRows || []).map((m) => [m.id, m.month_key]));
       const monthIds = [...monthMap.keys()];
 
-      // Paginate — only the 3 columns we need; skip raw_json
+      // Paginate — select signed_amount so outflows net off against inflows
       const PAGE = 5000;
       let all = [], page = 0;
       while (true) {
         const { data, error } = await state.supabase
           .from("cashflow_records")
-          .select("month_id,base_case_row,amount")
+          .select("month_id,base_case_row,signed_amount")
           .in("month_id", monthIds)
           .neq("base_case_row", "")
           .range(page * PAGE, (page + 1) * PAGE - 1);
@@ -1011,14 +1030,14 @@
         page++;
       }
 
-      // Aggregate: sums[base_case_row][month_key] = total
+      // Aggregate using signed_amount: inflows positive, outflows negative
       const sums = new Map();
       for (const r of all) {
         const mKey = monthMap.get(r.month_id);
         if (!mKey || !r.base_case_row) continue;
         if (!sums.has(r.base_case_row)) sums.set(r.base_case_row, new Map());
         const byMonth = sums.get(r.base_case_row);
-        byMonth.set(mKey, (byMonth.get(mKey) || 0) + Number(r.amount || 0));
+        byMonth.set(mKey, (byMonth.get(mKey) || 0) + Number(r.signed_amount || 0));
       }
 
       // Sort months chronologically
@@ -1055,24 +1074,31 @@
     if (!rows.length) { tbl.innerHTML = ""; if (meta) meta.textContent = ""; return; }
     if (meta) meta.textContent = `${rows.length} rows · ${keys.length} month(s)`;
 
-    const thHtml = ["Base Case Row", ...keys, "Total"].map((h) => `<th>${esc(h)}</th>`).join("");
+    const thHtml = ["Base Case Row", ...keys, "Total US$'000"].map((h) => `<th>${esc(h)}</th>`).join("");
+
+    const colorCell = (v) => {
+      const formatted = money(v / 1000);
+      const color = v < 0 ? "color:var(--red)" : "";
+      return `<td class="num" style="${color}">${formatted}</td>`;
+    };
 
     const bodyHtml = rows.map((r) => {
       const cells = [
         `<td>${esc(r.row)}</td>`,
-        ...keys.map((k) => `<td class="num">${money((r.byMonth.get(k) || 0) / 1000)}</td>`),
-        `<td class="num" style="font-weight:700">${money(r.total / 1000)}</td>`
+        ...keys.map((k) => colorCell(r.byMonth.get(k) || 0)),
+        `<td class="num" style="font-weight:700;${r.total < 0 ? "color:var(--red)" : ""}">${money(r.total / 1000)}</td>`
       ].join("");
       return `<tr>${cells}</tr>`;
     }).join("");
 
-    // Column totals row
+    // Net cash flow row (signed sum across all rows)
     const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
     const grandTotal = colTotals.reduce((a, b) => a + b, 0);
+    const netColor = grandTotal < 0 ? "color:var(--red)" : "color:var(--teal)";
     const totalRow = `<tr style="background:#edf3f8;font-weight:700;border-top:2px solid #c9d8e8">
-      <td>TOTAL</td>
-      ${colTotals.map((t) => `<td class="num">${money(t / 1000)}</td>`).join("")}
-      <td class="num">${money(grandTotal / 1000)}</td>
+      <td style="color:var(--navy)">NET CASH FLOW</td>
+      ${colTotals.map((t) => `<td class="num" style="${t < 0 ? "color:var(--red)" : "color:var(--teal)"}">${money(t / 1000)}</td>`).join("")}
+      <td class="num" style="${netColor}">${money(grandTotal / 1000)}</td>
     </tr>`;
 
     tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}${totalRow}</tbody>`;
@@ -1092,7 +1118,7 @@
         ...keys.map((k) => ((r.byMonth.get(k) || 0) / 1000).toFixed(1)),
         (r.total / 1000).toFixed(1)
       ]),
-      ["TOTAL", ...colTotals.map((t) => (t / 1000).toFixed(1)), (grandTotal / 1000).toFixed(1)]
+      ["NET CASH FLOW", ...colTotals.map((t) => (t / 1000).toFixed(1)), (grandTotal / 1000).toFixed(1)]
     ];
 
     const thHtml = headers.map((h) => `<th>${h}</th>`).join("");
