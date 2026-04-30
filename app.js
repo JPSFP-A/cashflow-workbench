@@ -56,7 +56,8 @@
 
   const state = {
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
-    loadedMonth: null, loadedAt: null, loadedBy: null, busy: false
+    loadedMonth: null, loadedAt: null, loadedBy: null, busy: false,
+    multiReport: null
   };
 
   // Returns the name typed in the header field, falling back to "Anonymous"
@@ -486,6 +487,29 @@
     if (error) return setStatus(error.message, "error");
     state.months = data || [];
     $("monthSelect").innerHTML = `<option value="">Select saved month</option>${state.months.map((m) => `<option value="${esc(m.month_key)}">${esc(m.month_key)}${m.last_processed_at ? " (" + fmtDateTime(m.last_processed_at) + ")" : ""}</option>`).join("")}`;
+    renderMultiMonthSelector();
+  }
+
+  function renderMultiMonthSelector() {
+    const container = $("multiMonthCheckboxes");
+    if (!container) return;
+    if (!state.months.length) {
+      container.innerHTML = '<p class="hint" style="padding:4px">No saved months — process a month first.</p>';
+      return;
+    }
+    // Preserve existing checked state
+    const checked = new Set([...container.querySelectorAll("input:checked")].map((c) => c.value));
+    container.innerHTML = state.months.map((m) => {
+      const isChecked = checked.has(m.month_key) ? "checked" : "";
+      const chipCls = checked.has(m.month_key) ? "month-pick-chip selected" : "month-pick-chip";
+      return `<label class="${chipCls}"><input type="checkbox" class="month-checkbox" value="${esc(m.month_key)}" ${isChecked}> ${esc(m.month_key)}</label>`;
+    }).join("");
+    // Toggle selected class live
+    container.querySelectorAll(".month-checkbox").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        cb.closest("label").classList.toggle("selected", cb.checked);
+      });
+    });
   }
 
   async function loadAudit() {
@@ -786,6 +810,153 @@
     setStatus(`Deleted rule ${ruleCode}`, "ok");
   }
 
+  // ── Multi-month report ────────────────────────────────────────────
+  async function generateMultiMonthReport() {
+    const selectedKeys = [...document.querySelectorAll(".month-checkbox:checked")].map((c) => c.value);
+    if (!selectedKeys.length) return setStatus("Select at least one month first.", "error");
+
+    setBusy(true);
+    setStatus(`Fetching data for ${selectedKeys.length} month(s)…`, "");
+    try {
+      // Resolve month keys → IDs
+      const { data: mRows, error: mErr } = await state.supabase
+        .from("cashflow_months").select("id,month_key").in("month_key", selectedKeys);
+      if (mErr) throw mErr;
+      const monthMap = new Map((mRows || []).map((m) => [m.id, m.month_key]));
+      const monthIds = [...monthMap.keys()];
+
+      // Paginate — only the 3 columns we need; skip raw_json
+      const PAGE = 5000;
+      let all = [], page = 0;
+      while (true) {
+        const { data, error } = await state.supabase
+          .from("cashflow_records")
+          .select("month_id,base_case_row,amount")
+          .in("month_id", monthIds)
+          .neq("base_case_row", "")
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        setStatus(`Fetching… ${all.length.toLocaleString()} records`, "");
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+
+      // Aggregate: sums[base_case_row][month_key] = total
+      const sums = new Map();
+      for (const r of all) {
+        const mKey = monthMap.get(r.month_id);
+        if (!mKey || !r.base_case_row) continue;
+        if (!sums.has(r.base_case_row)) sums.set(r.base_case_row, new Map());
+        const byMonth = sums.get(r.base_case_row);
+        byMonth.set(mKey, (byMonth.get(mKey) || 0) + Number(r.amount || 0));
+      }
+
+      // Sort months chronologically
+      const sortedKeys = selectedKeys.slice().sort();
+
+      // Build rows in baseRows order, then any extra rows not in baseRows
+      const orderedRows = [...baseRows, ...[...sums.keys()].filter((k) => !baseRows.includes(k))];
+      const reportRows = orderedRows
+        .filter((row) => sums.has(row))
+        .map((row) => {
+          const byMonth = sums.get(row);
+          return { row, byMonth, total: sortedKeys.reduce((s, k) => s + (byMonth.get(k) || 0), 0) };
+        });
+
+      state.multiReport = { rows: reportRows, keys: sortedKeys };
+      renderMultiReportTable();
+      const hint = $("multiReportHint");
+      if (hint) hint.textContent = "";
+      const exportBtn = $("exportMultiBtn");
+      if (exportBtn) exportBtn.disabled = false;
+      setStatus(`Report ready — ${reportRows.length} rows across ${sortedKeys.length} month(s), ${all.length.toLocaleString()} records`, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function renderMultiReportTable() {
+    const { rows, keys } = state.multiReport || { rows: [], keys: [] };
+    const tbl = $("multiReportTable");
+    const meta = $("multiReportMeta");
+    if (!tbl) return;
+    if (!rows.length) { tbl.innerHTML = ""; if (meta) meta.textContent = ""; return; }
+    if (meta) meta.textContent = `${rows.length} rows · ${keys.length} month(s)`;
+
+    const thHtml = ["Base Case Row", ...keys, "Total"].map((h) => `<th>${esc(h)}</th>`).join("");
+
+    const bodyHtml = rows.map((r) => {
+      const cells = [
+        `<td>${esc(r.row)}</td>`,
+        ...keys.map((k) => `<td class="num">${money((r.byMonth.get(k) || 0) / 1000)}</td>`),
+        `<td class="num" style="font-weight:700">${money(r.total / 1000)}</td>`
+      ].join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+
+    // Column totals row
+    const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
+    const grandTotal = colTotals.reduce((a, b) => a + b, 0);
+    const totalRow = `<tr style="background:#edf3f8;font-weight:700;border-top:2px solid #c9d8e8">
+      <td>TOTAL</td>
+      ${colTotals.map((t) => `<td class="num">${money(t / 1000)}</td>`).join("")}
+      <td class="num">${money(grandTotal / 1000)}</td>
+    </tr>`;
+
+    tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}${totalRow}</tbody>`;
+  }
+
+  function exportMultiMonthReport() {
+    const { rows, keys } = state.multiReport || { rows: [], keys: [] };
+    if (!rows.length) return;
+
+    const headers = ["Base Case Row", ...keys.map((k) => `US$'000 — ${k}`), "Total US$'000"];
+    const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
+    const grandTotal = colTotals.reduce((a, b) => a + b, 0);
+
+    const dataRows = [
+      ...rows.map((r) => [
+        r.row,
+        ...keys.map((k) => ((r.byMonth.get(k) || 0) / 1000).toFixed(1)),
+        (r.total / 1000).toFixed(1)
+      ]),
+      ["TOTAL", ...colTotals.map((t) => (t / 1000).toFixed(1)), (grandTotal / 1000).toFixed(1)]
+    ];
+
+    const thHtml = headers.map((h) => `<th>${h}</th>`).join("");
+    const bodyHtml = dataRows.map((r, i) => {
+      const isTotal = i === dataRows.length - 1;
+      const style = isTotal ? ' style="font-weight:bold;background:#dbeafe"' : "";
+      const cells = r.map((c, ci) => {
+        const align = ci > 0 ? ' style="text-align:right"' : "";
+        return `<td${align}>${c}</td>`;
+      }).join("");
+      return `<tr${style}>${cells}</tr>`;
+    }).join("");
+
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:x="urn:schemas-microsoft-com:office:excel"
+      xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8">
+      <style>
+        body{font-family:Calibri,Arial,sans-serif;font-size:11pt}
+        table{border-collapse:collapse}
+        th,td{border:1px solid #aab;padding:5px 10px}
+        th{background:#1d4e89;color:white;font-weight:700}
+        h2{color:#0f2744;font-size:13pt}
+      </style></head>
+      <body>
+        <h2>JPS FP&amp;A — Cashflow Base Case Multi-Month Comparison</h2>
+        <p style="color:#5e6875;font-size:10pt">Generated: ${new Date().toLocaleString()} &nbsp;|&nbsp; Months: ${keys.join(", ")}</p>
+        <table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>
+      </body></html>`;
+
+    download(`cashflow_base_case_${keys[0]}_to_${keys[keys.length - 1]}.xls`, html, "application/vnd.ms-excel");
+  }
+
   function tableToCleanHtml(tableEl) {
     // Build a clean HTML table from the DOM, stripping button cells
     const rows = [];
@@ -854,6 +1025,14 @@
     if ($("rulesSearch")) $("rulesSearch").addEventListener("input", renderRules);
     if ($("promptReapplyBtn")) $("promptReapplyBtn").addEventListener("click", reapplySavedRules);
     if ($("promptDismissBtn")) $("promptDismissBtn").addEventListener("click", hideReapplyPrompt);
+    if ($("generateMultiBtn")) $("generateMultiBtn").addEventListener("click", generateMultiMonthReport);
+    if ($("exportMultiBtn"))   $("exportMultiBtn").addEventListener("click", exportMultiMonthReport);
+    if ($("selectAllMonthsBtn")) $("selectAllMonthsBtn").addEventListener("click", () => {
+      document.querySelectorAll(".month-checkbox").forEach((c) => { c.checked = true; c.closest("label").classList.add("selected"); });
+    });
+    if ($("clearMonthsBtn")) $("clearMonthsBtn").addEventListener("click", () => {
+      document.querySelectorAll(".month-checkbox").forEach((c) => { c.checked = false; c.closest("label").classList.remove("selected"); });
+    });
   }
 
   bindUi();
