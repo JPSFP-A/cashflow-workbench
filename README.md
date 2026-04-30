@@ -1,23 +1,38 @@
 # Cashflow Workbench
 
-Static HTML cashflow workbench for monthly indirect cashflow preparation.
+Supabase-backed static HTML cashflow workbench for monthly indirect cashflow preparation.
 
 ## What It Does
 
-- Upload AP invoice/payment and cashbook text exports directly in the browser.
-- Categorize AP outflows using the procedure-based default rules.
-- Merge the cashbook 180 and 132 files so the output keeps the clearer description plus the fuller account/entry detail.
-- Map exceptions from the unmapped queue and immediately reapply the rules in-session.
-- Export records, mapping rules, and an Excel-compatible report.
+- Uses Supabase Auth for shared team access.
+- Saves months, uploaded source text, processed records, rules, and audit logs in Supabase.
+- Keeps the browser-based workflow lightweight so Vercel can host it as a plain static site.
+- Categorizes AP outflows using the procedure-based default rules and lets the team edit them in-app.
+- Merges the cashbook 180 and 132 files so the output keeps the clearer description plus the fuller account and entry detail.
 
 ## Deployment
 
-This repo is now Vercel-friendly as a plain static site. The main app is:
+This repo is Vercel-friendly as a plain static site:
 
 - `index.html`
+- `app.js`
+- `config.js`
+- `supabase/schema.sql`
 
-Vercel can deploy it without a build step.
+No build step is required.
 
-## Important Limitation
+## Setup
 
-This static version does not save changes back to GitHub by itself. If you edit rules in the browser, export the updated mapping rules CSV and reuse it next month.
+1. Create a Supabase project.
+2. Run [schema.sql](./supabase/schema.sql) in the Supabase SQL editor.
+3. Copy [config.example.js](./config.example.js) to `config.js` and fill in:
+   - `supabaseUrl`
+   - `supabaseAnonKey`
+4. Create your team users in Supabase Auth.
+5. Deploy the repo to Vercel.
+
+## Notes
+
+- `config.js` currently ships with placeholders so the app can deploy before credentials are added.
+- The Supabase anon key is safe to expose in the browser; keep the service role key out of the frontend.
+- Live data now belongs in Supabase, not GitHub. GitHub remains for code and optional exports.
