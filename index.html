@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cashflow Workbench</title>
+  <style>
+    :root{--ink:#17202a;--muted:#647080;--line:#d9e0e8;--soft:#f6f8fb;--blue:#174a7c;--green:#0f766e;--red:#b91c1c}
+    *{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:var(--ink);background:#fff;font-size:14px}
+    header{padding:20px 24px;border-bottom:1px solid var(--line);background:#f8fafc}h1{margin:0 0 4px;font-size:24px}p{margin:0;color:var(--muted)}
+    main{padding:18px 24px;max-width:1600px;margin:auto}.panel{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:14px}.panel h2{font-size:16px;margin:0;padding:12px 14px;background:var(--soft);border-bottom:1px solid var(--line)}.panel>*:not(h2){margin:12px 14px}
+    .grid{display:grid;grid-template-columns:repeat(5,minmax(160px,1fr));gap:10px}.split{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}.kpis{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin-bottom:14px}.kpi{border:1px solid var(--line);border-radius:8px;padding:11px}.kpi b{display:block;font-size:19px;margin-top:4px}
+    label{display:flex;flex-direction:column;gap:4px;color:var(--muted)}button,input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;background:white;padding:8px 10px}button{cursor:pointer}.primary{background:var(--blue);border-color:var(--blue);color:white}.good{background:var(--green);border-color:var(--green);color:white}.danger{border-color:#fecaca;color:var(--red);background:#fff5f5}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tab.active{background:var(--blue);color:white;border-color:var(--blue)}.tabPanel{display:none}.tabPanel.active{display:block}
+    .tablebox{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:8px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}th{position:sticky;top:0;background:#edf3f8}.num{text-align:right;font-variant-numeric:tabular-nums}.bad{font-weight:700;color:var(--red)}.hint{font-size:12px;color:var(--muted)}.stack{display:grid;gap:10px}.prose{line-height:1.55;max-width:980px}
+    @media(max-width:1000px){.grid,.split,.kpis{grid-template-columns:1fr}.tablebox{max-height:52vh}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Cashflow Workbench</h1>
+    <p>Static HTML cashflow mapper for AP outflows, cashbook validation, and Base Case rollup. Upload files, map exceptions, and export results.</p>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Upload Files</h2>
+      <div class="grid">
+        <label>Month <input id="monthInput" type="month"></label>
+        <label>AP invoice/payment report <input id="apFile" type="file" accept=".txt,.csv"></label>
+        <label>Cashbook description export (180) <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv"></label>
+        <label>Cashbook account export (132) <input id="cashbookAccountFile" type="file" accept=".txt,.csv"></label>
+        <label>Optional mapping rules CSV <input id="mappingFile" type="file" accept=".csv"></label>
+      </div>
+      <div class="toolbar">
+        <button class="primary" id="processBtn">Process In Browser</button>
+        <button id="exportRecordsBtn">Export Records CSV</button>
+        <button id="exportRulesBtn">Export Mapping Rules CSV</button>
+        <button id="exportReportBtn">Export Excel-Compatible Report</button>
+      </div>
+      <p class="hint">This version runs fully in the browser. It does not save back to GitHub by itself. Use the exported CSV files if you want to keep rule changes.</p>
+    </section>
+
+    <section class="kpis" id="kpis"></section>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="base">Base Case</button>
+      <button class="tab" data-tab="outflows">Outflow Validation</button>
+      <button class="tab" data-tab="exceptions">Map Exceptions</button>
+      <button class="tab" data-tab="rules">Rules</button>
+      <button class="tab" data-tab="instructions">Instructions</button>
+    </nav>
+
+    <section class="tabPanel active" id="base"><div class="panel"><h2>Base Case Summary</h2><div class="tablebox"><table id="baseTable"></table></div></div></section>
+    <section class="tabPanel" id="outflows"><div class="split"><div class="panel"><h2>AP Outflows By Base Case Row</h2><div class="tablebox"><table id="outflowBaseTable"></table></div></div><div class="panel"><h2>AP Outflows By Category</h2><div class="tablebox"><table id="outflowCategoryTable"></table></div></div></div></section>
+    <section class="tabPanel" id="exceptions">
+      <div class="split">
+        <div class="panel">
+          <h2>Exceptions / Unmapped Lines</h2>
+          <div class="toolbar">
+            <input id="searchInput" placeholder="Search vendor, pay group, FPC, description">
+            <select id="sourceFilter">
+              <option value="ap">AP outflows</option>
+              <option value="cashbook_debit">Cashbook debits</option>
+              <option value="cashbook_credit">Cashbook credits</option>
+              <option value="all">All sources</option>
+            </select>
+          </div>
+          <div class="tablebox"><table id="exceptionsTable"></table></div>
+        </div>
+        <div class="panel">
+          <h2>Add Rule From Exception</h2>
+          <div class="stack">
+            <label>Rule type
+              <select id="ruleType">
+                <option value="vendor_contains">Vendor contains</option>
+                <option value="paygroup_contains">Pay group contains</option>
+                <option value="fpc_equals">FPC equals</option>
+                <option value="fpc_prefix">FPC starts with</option>
+                <option value="fpc_range">FPC range</option>
+                <option value="description_contains">Description contains</option>
+                <option value="cashbook_cost_range">Cashbook cost item range</option>
+              </select>
+            </label>
+            <label>Match value <input id="matchValue" placeholder="Examples: JAMECO, 16501, 30000-39999, 321-322"></label>
+            <label>Category <input id="categoryValue" placeholder="Examples: Inventory, Capital, Loan Principal"></label>
+            <label>Base Case row <select id="baseRowValue"></select></label>
+            <label>Applies to
+              <select id="appliesTo">
+                <option value="ap">AP outflows</option>
+                <option value="cashbook_debit">Cashbook debits</option>
+                <option value="cashbook_credit">Cashbook credits</option>
+                <option value="cashbook">Cashbook all</option>
+                <option value="all">All sources</option>
+              </select>
+            </label>
+            <label>Optional pay group filter <input id="paygroupFilterValue" placeholder="Example: SUPPLIER or FUEL"></label>
+            <label>Notes <textarea id="notesValue"></textarea></label>
+            <div class="toolbar">
+              <button class="good" id="saveRuleBtn">Add Rule And Reapply</button>
+              <button id="clearRuleBtn">Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="tabPanel" id="rules"><div class="panel"><h2>Mapping Rules</h2><div class="tablebox"><table id="rulesTable"></table></div></div></section>
+    <section class="tabPanel" id="instructions"><div class="panel prose"><h2>How To Use It</h2><ol><li>Upload the AP invoice/payment report first. This is the main source for outflow categorization.</li><li>Upload the cashbook 180 and 132 files. The app merges the clearer descriptions from 180 with the entry/account detail from 132.</li><li>Click <b>Process In Browser</b>. The Base Case and Outflow Validation tabs update immediately.</li><li>Use <b>Map Exceptions</b> to create rules from unmapped lines.</li><li>Export the updated mapping rules CSV if you want to reuse them next month.</li></ol><h2>Procedure Logic Built In</h2><p>The default rules now follow your procedure: capital and inventory by FERC/FPC ranges, insurance 16501, Jameco, Office of Utilities, loan principal/interest/fees by FERC prefix, fuel by FERC and paygroup, donation/sponsorship/foundation as Other, cashbook cost item mappings, JE27/JE09MA/JE09TA/JE26B transfer logic, and cheque category mappings.</p></div></section>
+  </main>
+
+<script>
+const fmt=new Intl.NumberFormat('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
+const money=v=>fmt.format(Number(v||0));
+const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const norm=v=>String(v||'').trim().toUpperCase();
+const baseRows=['Collections','Long -term Debt Financing','Insurance Proceeds-Melissa','Other receipts (GCT Reimbursement)','Dividend Received','Fuel','IPP','Payroll & Related','Supplier/Contractor','Motor Vehicle Transport','Customs','Taxes','Inventory','Insurance','Equity Investment','Loan Principal','Loan Interest & Fees','Hurricane Melissa Restoration','Phase 2 Restoration','T&D Rebuild','Dividends Paid'];
+const defaultRules=[
+{rule_id:'RULE-0001',rule_type:'paygroup_contains',match_value:'PURCHASE POWER',category:'IPP',base_case_row:'IPP',applies_to:'ap',paygroup_filter:'',notes:'Procedure: purchase power payments'},
+{rule_id:'RULE-0002',rule_type:'fpc_range',match_value:'18601-18601',category:'Capital',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'SUPPLIER',notes:'Procedure: supplier capital 18601'},
+{rule_id:'RULE-0003',rule_type:'fpc_range',match_value:'30000-39999',category:'Capital',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'SUPPLIER',notes:'Procedure: supplier capital 30000-39999'},
+{rule_id:'RULE-0004',rule_type:'fpc_range',match_value:'15401-15499',category:'Inventory',base_case_row:'Inventory',applies_to:'ap',paygroup_filter:'SUPPLIER',notes:'Procedure: supplier inventory 15401-15499'},
+{rule_id:'RULE-0005',rule_type:'fpc_equals',match_value:'16501',category:'Insurance',base_case_row:'Insurance',applies_to:'ap',paygroup_filter:'',notes:'Procedure: insurance'},
+{rule_id:'RULE-0006',rule_type:'vendor_contains',match_value:'JAMECO',category:'Jameco',base_case_row:'Motor Vehicle Transport',applies_to:'ap',paygroup_filter:'',notes:'Procedure: Jameco vehicle lease'},
+{rule_id:'RULE-0007',rule_type:'vendor_contains',match_value:'OFFICE OF UTILITIES',category:'REGULATORY FEES',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: Office of Utilities'},
+{rule_id:'RULE-0008',rule_type:'fpc_prefix',match_value:'22',category:'Loan Principal',base_case_row:'Loan Principal',applies_to:'ap',paygroup_filter:'LOAN',notes:'Procedure: loans 22xxx'},
+{rule_id:'RULE-0009',rule_type:'fpc_prefix',match_value:'23',category:'Loan Interest',base_case_row:'Loan Interest & Fees',applies_to:'ap',paygroup_filter:'LOAN',notes:'Procedure: loans 23xxx'},
+{rule_id:'RULE-0010',rule_type:'fpc_prefix',match_value:'42',category:'Loan Fees',base_case_row:'Loan Interest & Fees',applies_to:'ap',paygroup_filter:'LOAN',notes:'Procedure: loans 42xxx'},
+{rule_id:'RULE-0011',rule_type:'fpc_prefix',match_value:'143',category:'JPS FUEL',base_case_row:'Fuel',applies_to:'ap',paygroup_filter:'FUEL',notes:'Procedure: fuel 143xx'},
+{rule_id:'RULE-0012',rule_type:'fpc_equals',match_value:'23237',category:'JPS FUEL',base_case_row:'Fuel',applies_to:'ap',paygroup_filter:'FUEL',notes:'Procedure: fuel 23237'},
+{rule_id:'RULE-0013',rule_type:'fpc_equals',match_value:'23258',category:'JPS FUEL',base_case_row:'Fuel',applies_to:'ap',paygroup_filter:'FUEL',notes:'Procedure: fuel 23258'},
+{rule_id:'RULE-0014',rule_type:'fpc_equals',match_value:'23272',category:'JPS FUEL',base_case_row:'Fuel',applies_to:'ap',paygroup_filter:'FUEL',notes:'Procedure: fuel 23272'},
+{rule_id:'RULE-0015',rule_type:'description_contains',match_value:'PROPERTY RENTAL',category:'Lease/Rental',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: property rental'},
+{rule_id:'RULE-0016',rule_type:'description_contains',match_value:'HEAD OFFICE',category:'Lease/Rental',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: head office property rental'},
+{rule_id:'RULE-0017',rule_type:'description_contains',match_value:'DONATION',category:'Other',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: other for donations'},
+{rule_id:'RULE-0018',rule_type:'description_contains',match_value:'SPONSORSHIP',category:'Other',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: other for sponsorships'},
+{rule_id:'RULE-0019',rule_type:'description_contains',match_value:'FOUNDATION',category:'Other',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: other for foundation items'},
+{rule_id:'RULE-0020',rule_type:'paygroup_contains',match_value:'REGULATORY FEES',category:'REGULATORY FEES',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: regulatory fees'},
+{rule_id:'RULE-0021',rule_type:'paygroup_contains',match_value:'SUPPLIER',category:'Supplier',base_case_row:'Supplier/Contractor',applies_to:'ap',paygroup_filter:'',notes:'Procedure: default supplier handling'},
+{rule_id:'RULE-0022',rule_type:'paygroup_contains',match_value:'TAX',category:'Taxes',base_case_row:'Taxes',applies_to:'ap',paygroup_filter:'',notes:'Procedure: taxes default'},
+{rule_id:'RULE-0023',rule_type:'cashbook_cost_range',match_value:'1-99',category:'Payroll',base_case_row:'Collections',applies_to:'cashbook_debit',paygroup_filter:'',notes:'Procedure: CI 1-99'},
+{rule_id:'RULE-0024',rule_type:'cashbook_cost_range',match_value:'321-322',category:'F/X Gain/(Loss)',base_case_row:'Collections',applies_to:'cashbook_debit',paygroup_filter:'',notes:'Procedure: CI 321-322'},
+{rule_id:'RULE-0025',rule_type:'cashbook_cost_range',match_value:'352-352',category:'Interest Income',base_case_row:'Collections',applies_to:'cashbook_debit',paygroup_filter:'',notes:'Procedure: CI 352'},
+{rule_id:'RULE-0026',rule_type:'cashbook_cost_range',match_value:'380-380',category:'Bank Charge',base_case_row:'',applies_to:'cashbook_credit',paygroup_filter:'',notes:'Procedure: CI 380'},
+{rule_id:'RULE-0027',rule_type:'cashbook_cost_range',match_value:'395-395',category:'Bank Charge',base_case_row:'',applies_to:'cashbook_credit',paygroup_filter:'',notes:'Procedure: CI 395'},
+{rule_id:'RULE-0028',rule_type:'cashbook_cost_range',match_value:'912-912',category:'Interest Income',base_case_row:'Collections',applies_to:'cashbook_debit',paygroup_filter:'',notes:'Procedure: CI 912'},
+{rule_id:'RULE-0029',rule_type:'description_contains',match_value:'JE27',category:'Cash Book',base_case_row:'Collections',applies_to:'cashbook_debit',paygroup_filter:'',notes:'Procedure: JE27 cash book'},
+{rule_id:'RULE-0030',rule_type:'description_contains',match_value:'JE 09MA',category:'Transfer',base_case_row:'',applies_to:'cashbook',paygroup_filter:'',notes:'Procedure: JE09MA transfer'}
+];
+let rules=[...defaultRules], records=[];
+baseRowValue.innerHTML='<option value="">Leave unassigned</option>'+baseRows.map(r=>`<option>${esc(r)}</option>`).join('');
+
+function parseCsv(text){const rows=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const ch=text[i];if(q){if(ch==='"'&&text[i+1]==='"'){cell+='"';i++}else if(ch==='"')q=false;else cell+=ch}else if(ch==='"')q=true;else if(ch===','){row.push(cell);cell=''}else if(ch==='\n'){row.push(cell);rows.push(row);row=[];cell=''}else if(ch!=='\r')cell+=ch}if(cell||row.length){row.push(cell);rows.push(row)}if(!rows.length)return[];const h=rows[0];return rows.slice(1).filter(r=>r.some(Boolean)).map(r=>Object.fromEntries(h.map((k,i)=>[k,r[i]||''])))}
+function toCsv(rows){if(!rows.length)return'';const keys=Object.keys(rows[0]);const e=v=>/[",\n\r]/.test(String(v??''))?`"${String(v??'').replaceAll('"','""')}"`:String(v??'');return [keys.join(','),...rows.map(r=>keys.map(k=>e(r[k])).join(','))].join('\n')}
+function dl(name,content,type='text/csv'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function num(v){const n=Number(String(v||'').replaceAll(',','').trim());return Number.isFinite(n)?n:0}
+function fixed(line,spans){return spans.map(([s,e])=>line.slice(s,e).trim())}
+function accountParts(account){const p=String(account||'').split('.');return{cost_item:(p[2]||'').replace(/^0+/,'')||'0',fpc:(p[3]||p[4]||'').slice(0,5).replace(/^0+/,'')||(p[3]||'')}}
+function parseCashbook(text,name){let spans=null,rows=[];for(const raw of text.split(/\r?\n/)){const line=raw.replace(/\f/g,'');if(line.startsWith('----------')){spans=[...line.matchAll(/-+/g)].map(m=>[m.index,m.index+m[0].length]);continue}if(!spans||!line.trim()||line.startsWith('Source')||/JPSCO Ledger|Report Date:|Page:|Period:|Currency:|Accounts From:|Balance Type:|Total for Period|Beginning Balance|Ending Balance/.test(line))continue;const vals=fixed(line.padEnd(180),spans);let source,category_code,batch_name,je_name,account,description,entry_item,debit,credit;if(vals.length===8){[source,category_code,batch_name,je_name,account,description,debit,credit]=vals;entry_item=''}else if(vals.length===9){[source,category_code,batch_name,je_name,account,description,entry_item,debit,credit]=vals}else continue;const debit_usd=num(debit),credit_usd=num(credit);if(!source||(!debit_usd&&!credit_usd))continue;const parts=accountParts(account);rows.push({id:`CB-${String(rows.length+1).padStart(5,'0')}`,data_source:'Cashbook',source_file:name,role:debit_usd?'Inflow':'Cashbook Credit',source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount:debit_usd||credit_usd,signed_amount:debit_usd-credit_usd,vendor:'',pay_group:'',fpc:parts.fpc,cost_item:parts.cost_item})}return rows}
+function mergeCashbooks(descText,acctText){const descRows=descText?parseCashbook(descText,'cashbook_180.txt'):[];const acctRows=acctText?parseCashbook(acctText,'cashbook_132.txt'):[];if(!descRows.length)return acctRows;if(!acctRows.length)return descRows;return acctRows.map((row,i)=>({...row,description:(descRows[i]&&descRows[i].description)||row.description,batch_name:(descRows[i]&&descRows[i].batch_name)||row.batch_name,entry_item:row.entry_item||((descRows[i]&&descRows[i].entry_item)||'')}))}
+function parseAp(text,name){const spans=[[0,4],[5,9],[10,15],[16,24],[25,45],[46,55],[56,62],[63,88],[89,114],[115,120],[121,130],[131,146],[147,162],[163,178],[179,187],[188,261],[262,282],[283,293],[294,303],[304,314],[315,330],[331,336],[337,340],[341,345]], names=['cc','ci','fpc','jobno','invoice_no','invoice_date','vendor_no','vendor','pay_group','emp_no','acct_date','amount_original','amount_usd','voucher_number','po_no','description','operating_unit','bank_account','check_no','check_date','amount_paid','void','currency','line_no'],rows=[];for(const raw of text.split(/\r?\n/)){const line=raw.replace(/\f/g,'');if(!line.trim()||line.startsWith('CC')||line.startsWith('----'))continue;const vals=fixed(line.padEnd(352),spans),item={};names.forEach((n,i)=>item[n]=vals[i]||'');const amount=Math.abs(num(item.amount_usd||item.amount_original));if(!item.cc||!item.fpc||!item.vendor||!amount)continue;rows.push({...item,id:`AP-${String(rows.length+1).padStart(5,'0')}`,data_source:'Invoice Payments',source_file:name,role:'Outflow',source:'Payables',category_code:'Payments',amount,signed_amount:-amount,cost_item:String(item.ci||'').replace(/^0+/,'')||'0',debit_usd:0,credit_usd:amount})}return rows}
+
+function inRange(value,rangeText){const v=parseInt(String(value||'').replace(/^0+/,''),10);if(Number.isNaN(v))return false;const parts=String(rangeText||'').split('-').map(x=>parseInt(x,10));if(parts.length===2&&!parts.some(Number.isNaN))return v>=parts[0]&&v<=parts[1];return false}
+function ruleApplies(rule,row){
+  const applies=norm(rule.applies_to||'all');
+  if(applies==='AP'&&row.data_source!=='Invoice Payments')return false;
+  if(applies==='CASHBOOK'&&row.data_source!=='Cashbook')return false;
+  if(applies==='CASHBOOK_DEBIT'&&row.role!=='Inflow')return false;
+  if(applies==='CASHBOOK_CREDIT'&&row.role!=='Cashbook Credit')return false;
+  if(rule.paygroup_filter&& !norm(row.pay_group).includes(norm(rule.paygroup_filter)))return false;
+  const match=norm(rule.match_value);
+  if(rule.rule_type==='vendor_contains')return norm(row.vendor).includes(match);
+  if(rule.rule_type==='paygroup_contains')return norm(row.pay_group).includes(match);
+  if(rule.rule_type==='fpc_equals')return norm(row.fpc)===match;
+  if(rule.rule_type==='fpc_prefix')return norm(row.fpc).startsWith(match);
+  if(rule.rule_type==='fpc_range')return inRange(row.fpc,rule.match_value);
+  if(rule.rule_type==='description_contains')return norm([row.description,row.category_code,row.je_name,row.batch_name].join(' ')).includes(match);
+  if(rule.rule_type==='cashbook_cost_range')return inRange(row.cost_item,rule.match_value);
+  return false;
+}
+function baseRowFor(row){
+  const c=norm(row.cashbook_category),pg=norm(row.pay_group);
+  if(row.data_source==='Cashbook'){if(row.role!=='Inflow'||c==='TRANSFER'||c==='BANK CHARGE')return'';return row.base_case_row||'Collections'}
+  if(pg.includes('PURCHASE POWER')||c==='IPP'||c==='PURCHASE POWER')return'IPP';
+  if(c==='JPS FUEL'||c==='FUEL')return'Fuel';
+  if(c==='PAYROLL'||pg.includes('EMPLOYEE'))return'Payroll & Related';
+  if(c==='INVENTORY')return'Inventory';
+  if(c==='INSURANCE')return'Insurance';
+  if(c==='LOAN PRINCIPAL')return'Loan Principal';
+  if(c==='LOAN INTEREST'||c==='LOAN FEES')return'Loan Interest & Fees';
+  if(c==='JAMECO')return'Motor Vehicle Transport';
+  if(c==='LEASE/RENTAL'||c==='CAPITAL'||c==='SUPPLIER'||c==='REGULATORY FEES'||c==='OTHER')return'Supplier/Contractor';
+  if(c==='TAXES')return'Taxes';
+  if(!c||c==='UNMAPPED')return'';
+  return'Supplier/Contractor';
+}
+function applyMappings(){
+  records=records.map(r=>{
+    const row={...r};
+    const rule=rules.find(rule=>ruleApplies(rule,row));
+    if(rule){row.cashbook_category=rule.category||'Unmapped';row.base_case_row=rule.base_case_row||baseRowFor(row);row.mapped=true;row.mapping_rule=rule.rule_id||rule.rule_type;}
+    else{row.cashbook_category='Unmapped';row.base_case_row='';row.mapped=false;row.mapping_rule='Unmapped';}
+    if(!row.base_case_row)row.base_case_row=baseRowFor(row);
+    if(row.data_source==='Invoice Payments' && !row.mapped && !/DONATION|SPONSORSHIP|FOUNDATION/i.test(row.description||'') && norm(row.pay_group).includes('SUPPLIER')){row.cashbook_category='Supplier';row.base_case_row='Supplier/Contractor';row.mapped=true;row.mapping_rule='Procedure fallback supplier';}
+    return row;
+  });
+}
+function group(rows,key){const map=new Map();for(const r of rows){const k=r[key]||'(Unassigned)',x=map.get(k)||{name:k,amount:0,lines:0,unmapped:0};x.amount+=Number(r.amount||0);x.lines++;if(!r.mapped)x.unmapped++;map.set(k,x)}return[...map.values()].sort((a,b)=>b.amount-a.amount)}
+function table(id,heads,rows){document.getElementById(id).innerHTML='<thead><tr>'+heads.map(h=>`<th>${esc(h.label)}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+heads.map(h=>`<td class="${h.num?'num':''}">${h.render?h.render(r):esc(r[h.key])}</td>`).join('')+'</tr>').join('')+'</tbody>'}
+function render(){let cd=0,cc=0,ap=0,exc=0,un=0;for(const r of records){if(r.role==='Inflow')cd+=r.amount;else if(r.role==='Cashbook Credit')cc+=r.amount;else ap+=r.amount;if(!r.mapped||!r.base_case_row)exc++;if(!r.mapped)un++}kpis.innerHTML=[['Cashbook Debits',money(cd)],['Cashbook Credits',money(cc)],['AP Outflows',money(ap)],['Needs Action',exc],['Unmapped',un]].map(([k,v])=>`<div class="kpi"><span>${k}</span><b>${v}</b></div>`).join('');const heads=[{label:'Group',key:'name'},{label:'US$ Amount',key:'amount',num:true,render:r=>money(r.amount)},{label:"US$'000",key:'amount',num:true,render:r=>money(r.amount/1000)},{label:'Lines',key:'lines',num:true},{label:'Unmapped',key:'unmapped',num:true}];table('baseTable',heads,group(records.filter(r=>r.base_case_row),'base_case_row'));const apRows=records.filter(r=>r.data_source==='Invoice Payments');table('outflowBaseTable',heads,group(apRows,'base_case_row'));table('outflowCategoryTable',heads,group(apRows,'cashbook_category'));renderExceptions();renderRules()}
+function sourceOk(r){const v=sourceFilter.value;if(v==='ap')return r.data_source==='Invoice Payments';if(v==='cashbook_debit')return r.role==='Inflow';if(v==='cashbook_credit')return r.role==='Cashbook Credit';return true}
+function renderExceptions(){const q=norm(searchInput.value);const rows=records.filter(sourceOk).filter(r=>!r.mapped||!r.base_case_row).filter(r=>!q||norm([r.vendor,r.pay_group,r.fpc,r.cost_item,r.description,r.cashbook_category,r.category_code,r.je_name].join(' ')).includes(q)).slice(0,500);table('exceptionsTable',[{label:'Map',key:'id',render:r=>`<button onclick="prefill('${esc(r.id)}')">Map</button>`},{label:'ID',key:'id'},{label:'Source',key:'data_source'},{label:'Role',key:'role'},{label:'Base Row',key:'base_case_row'},{label:'Category',key:'cashbook_category',render:r=>r.mapped?esc(r.cashbook_category):'<span class="bad">Unmapped</span>'},{label:'Vendor / Pay Group',key:'vendor',render:r=>esc(r.vendor||r.pay_group)},{label:'FPC',key:'fpc'},{label:'Cost',key:'cost_item'},{label:'Description',key:'description'},{label:'Amount',key:'amount',num:true,render:r=>money(r.amount)}],rows)}
+function renderRules(){table('rulesTable',[{label:'Rule ID',key:'rule_id'},{label:'Type',key:'rule_type'},{label:'Match',key:'match_value'},{label:'Category',key:'category'},{label:'Base Row',key:'base_case_row'},{label:'Applies To',key:'applies_to'},{label:'Paygroup Filter',key:'paygroup_filter'},{label:'Notes',key:'notes'}],rules)}
+function prefill(id){const r=records.find(x=>x.id===id);if(!r)return;ruleType.value=r.vendor?'vendor_contains':r.pay_group?'paygroup_contains':r.fpc?'fpc_equals':'description_contains';matchValue.value=r.vendor||r.pay_group||r.fpc||String(r.description||'').split(' ').slice(0,4).join(' ');categoryValue.value=r.cashbook_category==='Unmapped'?'':r.cashbook_category;baseRowValue.value=r.base_case_row||'';appliesTo.value=r.data_source==='Invoice Payments'?'ap':r.role==='Inflow'?'cashbook_debit':'cashbook_credit';paygroupFilterValue.value='';notesValue.value=`Created from ${r.id}`}
+async function read(input){return input.files[0]?input.files[0].text():''}
+async function process(){const mapping=await read(mappingFile); if(mapping)rules=parseCsv(mapping); else rules=[...defaultRules]; const ap=await read(apFile), cbd=await read(cashbookDescriptionFile), cba=await read(cashbookAccountFile);records=[];records.push(...mergeCashbooks(cbd,cba));if(ap)records.push(...parseAp(ap,'invoice_payments.txt'));applyMappings();render()}
+function addRule(){const rule={rule_id:`RULE-${String(rules.length+1).padStart(4,'0')}`,rule_type:ruleType.value,match_value:matchValue.value,category:categoryValue.value,base_case_row:baseRowValue.value,applies_to:appliesTo.value,paygroup_filter:paygroupFilterValue.value,notes:notesValue.value,active:'true'};if(!rule.match_value||!rule.category)return alert('Match value and category are required.');rules.push(rule);applyMappings();render()}
+function clearRule(){matchValue.value='';categoryValue.value='';baseRowValue.value='';notesValue.value='';paygroupFilterValue.value='';ruleType.value='vendor_contains';appliesTo.value='ap'}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab,.tabPanel').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active')});
+processBtn.onclick=process;saveRuleBtn.onclick=addRule;clearRuleBtn.onclick=clearRule;searchInput.oninput=renderExceptions;sourceFilter.onchange=renderExceptions;exportRecordsBtn.onclick=()=>dl(`cashflow_records_${monthInput.value||'month'}.csv`,toCsv(records));exportRulesBtn.onclick=()=>dl('mapping_rules.csv',toCsv(rules));exportReportBtn.onclick=()=>{const html='<html><body><h2>Base Case</h2><table border="1">'+baseTable.innerHTML+'</table><h2>AP Outflow Validation</h2><table border="1">'+outflowBaseTable.innerHTML+'</table><h2>Rules</h2><table border="1">'+rulesTable.innerHTML+'</table></body></html>';dl(`cashflow_report_${monthInput.value||'month'}.xls`,html,'application/vnd.ms-excel')};
+monthInput.value=new Date().toISOString().slice(0,7);render();
+</script>
+</body>
+</html>
