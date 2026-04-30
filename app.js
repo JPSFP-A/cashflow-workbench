@@ -57,7 +57,8 @@
   const state = {
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
     loadedMonth: null, loadedAt: null, loadedBy: null, busy: false,
-    multiReport: null
+    multiReport: null, settings: {},
+    pendingApprovalMonth: null   // month key waiting for OTP entry
   };
 
   // Returns the name typed in the header field, falling back to "Anonymous"
@@ -466,7 +467,7 @@
   async function init() {
     if (!(await ensureSupabase())) return;
     setStatus("Connected.", "ok");
-    await Promise.all([loadRules(true), loadMonths(), loadAudit()]);
+    await Promise.all([loadRules(true), loadMonths(), loadAudit(), loadSettings()]);
   }
 
   async function loadRules(syncDefaults = true) {
@@ -492,10 +493,16 @@
   }
 
   async function loadMonths() {
-    const { data, error } = await state.supabase.from("cashflow_months").select("id,month_key,last_processed_at,processed_by").order("month_key", { ascending: false });
+    const { data, error } = await state.supabase
+      .from("cashflow_months")
+      .select("id,month_key,last_processed_at,processed_by,status,approved_by,approved_at")
+      .order("month_key", { ascending: false });
     if (error) return setStatus(error.message, "error");
     state.months = data || [];
-    $("monthSelect").innerHTML = `<option value="">Select saved month</option>${state.months.map((m) => `<option value="${esc(m.month_key)}">${esc(m.month_key)}${m.last_processed_at ? " (" + fmtDateTime(m.last_processed_at) + ")" : ""}</option>`).join("")}`;
+    $("monthSelect").innerHTML = `<option value="">Select saved month</option>${state.months.map((m) => {
+      const lock = m.status === "approved" ? " 🔒" : "";
+      return `<option value="${esc(m.month_key)}">${esc(m.month_key)}${lock}${m.last_processed_at ? " (" + fmtDateTime(m.last_processed_at) + ")" : ""}</option>`;
+    }).join("")}`;
     renderMultiMonthSelector();
   }
 
@@ -549,6 +556,127 @@
     await loadRules(false);
   }
 
+  // ── Edge function helper ──────────────────────────────────────────
+  async function callEdgeFn(action, payload = {}) {
+    const url = `${window.APP_CONFIG.supabaseUrl}/functions/v1/cashflow-approval`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": window.APP_CONFIG.supabaseAnonKey
+      },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `Edge function error (${res.status})`);
+    return data;
+  }
+
+  // ── Settings helpers ─────────────────────────────────────────────
+  async function loadSettings() {
+    const { data } = await state.supabase.from("cashflow_settings").select("key,value");
+    state.settings = Object.fromEntries((data || []).map((r) => [r.key, r.value]));
+    if ($("adminApproverEmail")) $("adminApproverEmail").value = state.settings.approver_email || "";
+    if ($("adminFromEmail"))     $("adminFromEmail").value     = state.settings.from_email || "";
+  }
+
+  async function saveSettings() {
+    const approver = ($("adminApproverEmail").value || "").trim();
+    const from     = ($("adminFromEmail").value || "").trim();
+    if (!approver) return setStatus("Approver email is required.", "error");
+    const rows = [
+      { key: "approver_email", value: approver, updated_by: userName(), updated_at: timestamp() },
+      { key: "from_email",     value: from,     updated_by: userName(), updated_at: timestamp() }
+    ];
+    const { error } = await state.supabase.from("cashflow_settings").upsert(rows, { onConflict: "key" });
+    if (error) return setStatus(error.message, "error");
+    state.settings.approver_email = approver;
+    state.settings.from_email     = from;
+    await auditLog("save_settings", null, null, `Approver email set to ${approver}`);
+    setStatus("Settings saved.", "ok");
+  }
+
+  // ── Admin month table ─────────────────────────────────────────────
+  function renderAdmin() {
+    const tbl = $("adminMonthTable");
+    if (!tbl) return;
+    if (!state.months.length) {
+      tbl.innerHTML = "<thead><tr><th>Month</th><th>Status</th><th>Approved By</th><th>Approved At</th><th>Action</th></tr></thead><tbody><tr><td colspan='5' style='color:#5e6875;padding:14px'>No saved months yet.</td></tr></tbody>";
+      return;
+    }
+    const rows = state.months.map((m) => {
+      const isApproved = m.status === "approved";
+      const chipCls  = isApproved ? "approved" : "open";
+      const chipText = isApproved ? "✓ Approved" : "● Open";
+      const actionBtn = isApproved
+        ? `<span class="hint">Locked</span>`
+        : `<button class="btn btn-teal btn-sm" onclick="window.cashflowApp.requestApproval('${esc(m.month_key)}')">📨 Submit for Approval</button>`;
+      return `<tr>
+        <td><strong>${esc(m.month_key)}</strong></td>
+        <td><span class="status-chip ${chipCls}">${chipText}</span></td>
+        <td>${esc(m.approved_by || "—")}</td>
+        <td>${esc(m.approved_at ? fmtDateTime(m.approved_at) : "—")}</td>
+        <td>${actionBtn}</td>
+      </tr>`;
+    }).join("");
+    tbl.innerHTML = `<thead><tr><th>Month</th><th>Status</th><th>Approved By</th><th>Approved At</th><th>Action</th></tr></thead><tbody>${rows}</tbody>`;
+  }
+
+  // ── Approval flow ─────────────────────────────────────────────────
+  async function requestApproval(monthKey) {
+    if (!state.settings.approver_email) {
+      return setStatus("Set the approver email in Admin → Settings first.", "error");
+    }
+    setBusy(true);
+    setStatus("Sending approval code…", "");
+    try {
+      const result = await callEdgeFn("send_code", { month_key: monthKey });
+      state.pendingApprovalMonth = monthKey;
+      openApprovalModal(monthKey, result.to);
+      setStatus(`Code sent to ${result.to}`, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openApprovalModal(monthKey, toEmail) {
+    $("otpInput").value = "";
+    $("otpError").textContent = "";
+    const modal = $("approvalModal");
+    modal.querySelector("p").textContent =
+      `A 6-digit code was sent to ${toEmail || "the approver"}. Enter it below to lock ${monthKey}.`;
+    modal.classList.add("open");
+    setTimeout(() => $("otpInput").focus(), 60);
+  }
+
+  function closeApprovalModal() {
+    $("approvalModal").classList.remove("open");
+    state.pendingApprovalMonth = null;
+  }
+
+  async function submitApprovalCode() {
+    const monthKey = state.pendingApprovalMonth;
+    const code     = $("otpInput").value.trim();
+    if (!monthKey) return;
+    if (!code || code.length !== 6) { $("otpError").textContent = "Enter the 6-digit code."; return; }
+    $("otpError").textContent = "";
+    $("submitOtpBtn").disabled = true;
+    try {
+      await callEdgeFn("verify_code", { month_key: monthKey, code });
+      closeApprovalModal();
+      await loadMonths();
+      renderAdmin();
+      await loadAudit();
+      setStatus(`✓ ${monthKey} is now approved and locked.`, "ok");
+    } catch (err) {
+      $("otpError").textContent = err.message;
+    } finally {
+      $("submitOtpBtn").disabled = false;
+    }
+  }
+
   async function auditLog(action, monthKey, ruleCode, details) {
     if (!state.supabase) return;
     await state.supabase.from("cashflow_audit_log").insert([{ action, month_key: monthKey || null, rule_code: ruleCode || null, details, user_name: userName() }]);
@@ -587,8 +715,12 @@
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a month first.", "error");
 
-    // Warn before overwriting an existing saved month
+    // Block processing if month is approved/locked
     const existing = state.months.find((m) => m.month_key === monthKey);
+    if (existing && existing.status === "approved") {
+      return setStatus(`${monthKey} is approved and locked. It cannot be overwritten.`, "error");
+    }
+    // Warn before overwriting an existing saved month
     if (existing && !confirm(`${monthKey} already has saved data (last processed ${fmtDateTime(existing.last_processed_at)}). Overwrite?`)) return;
 
     setBusy(true);
@@ -684,6 +816,9 @@
     if (state.busy) return;
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a month first.", "error");
+    // Block if approved/locked
+    const locked = state.months.find((m) => m.month_key === monthKey && m.status === "approved");
+    if (locked) return setStatus(`${monthKey} is approved and locked. Rules cannot be reapplied.`, "error");
     setBusy(true);
     setStatus("Reapplying rules…", "");
     try {
@@ -716,19 +851,33 @@
   async function resetMonth() {
     const monthKey = currentMonthKey();
     if (!monthKey) return setStatus("Choose a month first.", "error");
-    if (!confirm(`Reset / wipe ALL data for ${monthKey} from the live app tables? This cannot be undone.`)) return;
+
+    // Warn if approved / locked
+    const savedMonth = state.months.find((m) => m.month_key === monthKey);
+    const isLocked = savedMonth && savedMonth.status === "approved";
+    const confirmMsg = isLocked
+      ? `⚠️ ${monthKey} is APPROVED / LOCKED.\n\nDeleting an approved month is an exceptional action. Are you absolutely sure?`
+      : `Reset / wipe ALL data for ${monthKey}? This cannot be undone.`;
+    if (!confirm(confirmMsg)) return;
+
     setBusy(true);
+    setStatus("Notifying approver and deleting…", "");
     try {
+      // Fire delete notification (does not block if email not configured)
+      try { await callEdgeFn("notify_delete", { month_key: monthKey, deleter_name: userName() }); }
+      catch (_) { /* non-fatal — email config optional */ }
+
       const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).single();
       if (!month) { setStatus("Month not found.", "error"); return; }
       await state.supabase.from("cashflow_source_uploads").delete().eq("month_id", month.id);
       await state.supabase.from("cashflow_records").delete().eq("month_id", month.id);
       await state.supabase.from("cashflow_months").delete().eq("id", month.id);
-      await auditLog("reset_month", monthKey, "", "Reset / wiped month from live tables");
+      await auditLog("reset_month", monthKey, "", `Reset / wiped month${isLocked ? " (was approved/locked)" : ""}`);
       state.records = []; state.uploads = {}; state.loadedMonth = null; state.loadedAt = null;
       await loadMonths();
       await loadAudit();
       renderAll();
+      renderAdmin();
       setStatus(`Reset ${monthKey}`, "ok");
     } finally {
       setBusy(false);
@@ -1068,10 +1217,36 @@
     if ($("clearMonthsBtn")) $("clearMonthsBtn").addEventListener("click", () => {
       document.querySelectorAll(".month-checkbox").forEach((c) => { c.checked = false; c.closest("label").classList.remove("selected"); });
     });
+
+    // Admin
+    if ($("saveSettingsBtn")) $("saveSettingsBtn").addEventListener("click", saveSettings);
+    if ($("refreshAdminBtn")) $("refreshAdminBtn").addEventListener("click", async () => {
+      await loadMonths(); await loadSettings(); renderAdmin();
+    });
+
+    // OTP modal
+    if ($("submitOtpBtn")) $("submitOtpBtn").addEventListener("click", submitApprovalCode);
+    if ($("cancelOtpBtn")) $("cancelOtpBtn").addEventListener("click", closeApprovalModal);
+    if ($("otpInput")) {
+      $("otpInput").addEventListener("keydown", (e) => { if (e.key === "Enter") submitApprovalCode(); });
+      // Numeric-only filter
+      $("otpInput").addEventListener("input", () => {
+        $("otpInput").value = $("otpInput").value.replace(/\D/g, "").slice(0, 6);
+      });
+    }
+    // Close modal on backdrop click
+    if ($("approvalModal")) $("approvalModal").addEventListener("click", (e) => {
+      if (e.target === $("approvalModal")) closeApprovalModal();
+    });
+
+    // Render admin table when the tab is opened
+    document.querySelectorAll('.tab-btn[data-tab="admin"]').forEach((btn) => {
+      btn.addEventListener("click", () => { renderAdmin(); });
+    });
   }
 
   bindUi();
   init();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval };
 })();

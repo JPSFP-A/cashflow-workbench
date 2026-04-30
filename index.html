@@ -363,6 +363,36 @@
 
     .multi-report-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0 16px 14px; }
 
+    /* ── Admin / modal ───────────────────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 5000;
+      background: rgba(15,39,68,.55);
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--white); border-radius: 14px; padding: 36px 32px 28px;
+      max-width: 400px; width: 100%;
+      box-shadow: 0 20px 60px rgba(15,39,68,.30);
+      animation: slideUp .25s cubic-bezier(.22,.8,.36,1);
+    }
+    .modal-card h3 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 0 0 8px; }
+    .modal-card p  { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+    #otpInput {
+      font-size: 30px; letter-spacing: 10px; text-align: center;
+      font-family: monospace; font-weight: 700;
+      padding: 14px 10px;
+    }
+    #otpError { color: var(--red); font-size: 13px; min-height: 18px; margin: 4px 0 14px; }
+
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      border-radius: 999px; font-size: 11px; font-weight: 700;
+      padding: 3px 10px;
+    }
+    .status-chip.open     { background: #fffbeb; color: var(--gold); border: 1px solid #fcd34d; }
+    .status-chip.approved { background: #d1fae5; color: var(--teal); border: 1px solid #6ee7b7; }
+
     /* ── Responsive ───────────────────────────────────────────────── */
     @media (max-width: 1100px) {
       .grid-3, .grid-2 { grid-template-columns: 1fr; }
@@ -487,6 +517,7 @@
         <button class="tab-btn" data-tab="rules">⚙ Rules</button>
         <button class="tab-btn" data-tab="audit">📜 Audit Log</button>
         <button class="tab-btn" data-tab="multimonth">📊 Multi-Month Report</button>
+        <button class="tab-btn" data-tab="admin">🔐 Admin</button>
         <button class="tab-btn" data-tab="instructions">❓ Instructions</button>
       </nav>
 
@@ -648,6 +679,50 @@
         </div>
       </div>
 
+      <!-- ── Admin ── -->
+      <div class="tab-panel" id="admin">
+        <div class="grid-2">
+
+          <!-- Settings card -->
+          <div class="panel">
+            <div class="panel-head">⚙ Settings</div>
+            <div class="panel-body">
+              <div class="form-stack">
+                <div class="form-field">
+                  <label>Approver email</label>
+                  <input id="adminApproverEmail" type="email" placeholder="approver@jps.com.jm">
+                </div>
+                <div class="form-field">
+                  <label>From email <span class="hint">(must be a verified sender in Resend)</span></label>
+                  <input id="adminFromEmail" type="email" placeholder="notifications@jps.com.jm">
+                </div>
+                <div class="action-bar">
+                  <button class="btn btn-primary" id="saveSettingsBtn">✓ Save Settings</button>
+                </div>
+              </div>
+              <div style="margin-top:18px;padding:14px;background:var(--soft);border-radius:var(--radius-sm);font-size:13px;line-height:1.75;color:var(--ink)">
+                <strong>Setup checklist</strong><br>
+                1. Enter the approver and from email above and click <b>Save Settings</b>.<br>
+                2. Set <code>RESEND_API_KEY</code> as a Supabase secret:<br>
+                &nbsp;&nbsp;Supabase Dashboard → Edge Functions → cashflow-approval → Secrets.<br>
+                3. The <em>from</em> email must be a verified sender in your Resend account.<br>
+                4. Click <b>Submit for Approval</b> on any open month to trigger the OTP email.
+              </div>
+            </div>
+          </div>
+
+          <!-- Month approval status card -->
+          <div class="panel">
+            <div class="panel-head">
+              Month Approval Status
+              <button class="btn btn-ghost btn-sm" id="refreshAdminBtn">↻ Refresh</button>
+            </div>
+            <div class="tablebox tall"><table id="adminMonthTable"></table></div>
+          </div>
+
+        </div>
+      </div>
+
       <!-- ── Instructions ── -->
       <div class="tab-panel" id="instructions">
         <div class="panel prose">
@@ -721,6 +796,25 @@
 
     </main>
   </div><!-- /appShell -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       OTP APPROVAL MODAL
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="approvalModal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>Enter Approval Code</h3>
+      <p>A 6-digit code was emailed to the approver. Enter it below to lock this month.</p>
+      <div class="form-field" style="margin-bottom:4px">
+        <label>6-digit code</label>
+        <input id="otpInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code">
+      </div>
+      <div id="otpError"></div>
+      <div class="action-bar">
+        <button class="btn btn-teal" id="submitOtpBtn">✓ Approve Month</button>
+        <button class="btn btn-ghost" id="cancelOtpBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
