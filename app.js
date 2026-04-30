@@ -396,8 +396,24 @@
     ], state.audit);
   }
 
+  // Only render the currently visible data tab; mark the rest pending so they render when clicked.
+  const pendingRender = new Set();
+  function activeTabName() {
+    const btn = document.querySelector(".tab.active");
+    return btn ? btn.dataset.tab : "outflows";
+  }
+  function renderDataTab(name) {
+    if (name === "outflows") { renderOutflows(); pendingRender.delete("outflows"); }
+    else if (name === "base")  { renderBase();     pendingRender.delete("base"); }
+    else if (name === "exceptions") { renderExceptions(); pendingRender.delete("exceptions"); }
+  }
   function renderAll() {
-    renderMonthBar(); renderKpis(); renderBase(); renderOutflows(); renderExceptions(); renderRules(); renderAudit();
+    renderMonthBar();
+    renderKpis();
+    pendingRender.add("outflows");
+    pendingRender.add("base");
+    pendingRender.add("exceptions");
+    renderDataTab(activeTabName());
   }
 
   function nextRuleCode() {
@@ -498,7 +514,7 @@
     if (records.length) {
       const chunkSize = 500;
       for (let i = 0; i < records.length; i += chunkSize) {
-        const chunk = records.slice(i, i + chunkSize).map((r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "", raw_json: r }));
+        const chunk = records.slice(i, i + chunkSize).map((r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "" }));
         const { error } = await state.supabase.from("cashflow_records").insert(chunk);
         if (error) throw error;
       }
@@ -544,6 +560,29 @@
     }
   }
 
+  // Columns needed for rendering, mapping, and export — excludes raw_json (was 13 MB / month).
+  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule";
+
+  async function fetchAllRecords(monthId) {
+    // PostgREST default row cap is 1 000. Paginate to get every record.
+    const PAGE = 1000;
+    let all = [], page = 0;
+    while (true) {
+      const { data, error } = await state.supabase
+        .from("cashflow_records")
+        .select(RECORD_COLS)
+        .eq("month_id", monthId)
+        .order("record_key")
+        .range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) throw error;
+      all = all.concat(data || []);
+      setStatus(`Loading… ${all.length} records`, "");
+      if (!data || data.length < PAGE) break;
+      page++;
+    }
+    return all;
+  }
+
   async function loadMonth() {
     if (state.busy) return;
     const monthKey = currentMonthKey();
@@ -551,21 +590,27 @@
     setBusy(true);
     setStatus("Loading…", "");
     try {
-      const { data: month, error: monthError } = await state.supabase.from("cashflow_months").select("id,month_key,last_processed_at,processed_by").eq("month_key", monthKey).single();
+      const { data: month, error: monthError } = await state.supabase
+        .from("cashflow_months")
+        .select("id,month_key,last_processed_at,processed_by")
+        .eq("month_key", monthKey).single();
       if (monthError) { setStatus(monthError.message, "error"); return; }
-      const [{ data: records, error }, { data: uploads }] = await Promise.all([
-        state.supabase.from("cashflow_records").select("*").eq("month_id", month.id).order("record_key"),
+
+      const [records, { data: uploads }] = await Promise.all([
+        fetchAllRecords(month.id),
         state.supabase.from("cashflow_source_uploads").select("source_type,content_text").eq("month_id", month.id)
       ]);
-      if (error) { setStatus(error.message, "error"); return; }
-      state.records = (records || []).map((r) => ({ ...r, ...((r.raw_json && typeof r.raw_json === "object") ? r.raw_json : {}) }));
+
+      state.records = records;
       state.uploads = Object.fromEntries((uploads || []).map((u) => [u.source_type, u.content_text]));
       state.loadedMonth = monthKey;
       state.loadedAt = month.last_processed_at;
-      state.loadedBy = null;
+      state.loadedBy = month.processed_by || null;
       $("monthInput").value = monthKey;
       renderAll();
-      setStatus(`Loaded ${monthKey}`, "ok");
+      setStatus(`Loaded ${monthKey} — ${records.length} records`, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
     } finally {
       setBusy(false);
     }
@@ -750,6 +795,8 @@
         document.querySelectorAll(".tab,.tabPanel").forEach((x) => x.classList.remove("active"));
         btn.classList.add("active");
         $(btn.dataset.tab).classList.add("active");
+        // Render this tab if its data is stale
+        if (pendingRender.has(btn.dataset.tab)) renderDataTab(btn.dataset.tab);
       });
     });
   }
