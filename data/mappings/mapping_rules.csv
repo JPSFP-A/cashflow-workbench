@@ -1,0 +1,8 @@
+rule_id,rule_type,match_value,category,base_case_row,applies_to,notes,active,created_at,updated_at
+RULE-0001,paygroup,PURCHASE POWER,IPP,IPP,ap,Default AP purchase power mapping,true,,
+RULE-0002,paygroup,FUEL,JPS FUEL,Fuel,ap,Default AP fuel mapping,true,,
+RULE-0003,paygroup,EMPLOYEE,Payroll,Payroll & Related,ap,Default employee reimbursements mapping,true,,
+RULE-0004,fpc,16501,Insurance,Insurance,ap,Default insurance mapping,true,,
+RULE-0005,cashbook_cost,321,F/X Gain/(Loss),Collections,cashbook_debit,Default cashbook FX mapping,true,,
+RULE-0006,cashbook_cost,352,Interest Income,Collections,cashbook_debit,Default interest income mapping,true,,
+RULE-0007,cashbook_cost,380,Bank Charge,,cashbook_credit,Default bank charge check mapping,true,,
