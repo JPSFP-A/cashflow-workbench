@@ -469,15 +469,24 @@
     await Promise.all([loadRules(true), loadMonths(), loadAudit()]);
   }
 
-  async function loadRules(seedIfEmpty = true) {
+  async function loadRules(syncDefaults = true) {
     const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("rule_code");
     if (error) return setStatus(error.message, "error");
-    if ((!data || !data.length) && seedIfEmpty) {
-      const rows = defaultRules.map((r) => ({ ...r, created_by: userName(), updated_by: userName() }));
-      const { error: seedError } = await state.supabase.from("cashflow_rules").insert(rows);
-      if (seedError) return setStatus(seedError.message, "error");
-      return loadRules(false);
+
+    if (syncDefaults) {
+      // Insert any default rules that are missing from the DB.
+      // Uses rule_code as the key — never overwrites user edits to existing rules.
+      const existingCodes = new Set((data || []).map((r) => r.rule_code));
+      const missing = defaultRules.filter((r) => !existingCodes.has(r.rule_code));
+      if (missing.length) {
+        const rows = missing.map((r) => ({ ...r, created_by: "system (auto-sync)", updated_by: "system (auto-sync)" }));
+        const { error: insertErr } = await state.supabase.from("cashflow_rules").insert(rows);
+        if (insertErr) return setStatus(insertErr.message, "error");
+        await auditLog("sync_rules", null, null, `Auto-added ${missing.length} missing default rule(s): ${missing.map((r) => r.rule_code).join(", ")}`);
+        return loadRules(false); // reload with the new rules
+      }
     }
+
     state.rules = data || [];
     renderRules();
   }
@@ -790,6 +799,17 @@
       updated_by: userName()
     };
     if (!rule.match_value || !rule.category) return setStatus("Match value and category are required.", "error");
+
+    // Duplicate check — warn if another active rule has the same type + match + scope
+    const dupe = state.rules.find((r) =>
+      r.rule_code !== rule.rule_code &&
+      r.rule_type === rule.rule_type &&
+      norm(r.match_value) === norm(rule.match_value) &&
+      r.applies_to === rule.applies_to &&
+      r.active !== false
+    );
+    if (dupe && !confirm(`⚠ Duplicate detected: ${dupe.rule_code} already has the same type, match value, and scope (${dupe.rule_type}: "${dupe.match_value}" → ${dupe.category}).\n\nSave anyway?`)) return;
+
     const { error } = await state.supabase.from("cashflow_rules").upsert([rule], { onConflict: "rule_code" });
     if (error) return setStatus(error.message, "error");
     await auditLog("save_rule", currentMonthKey(), rule.rule_code, `${rule.rule_type}: ${rule.match_value} → ${rule.category}`);
@@ -1025,6 +1045,21 @@
     if ($("rulesSearch")) $("rulesSearch").addEventListener("input", renderRules);
     if ($("promptReapplyBtn")) $("promptReapplyBtn").addEventListener("click", reapplySavedRules);
     if ($("promptDismissBtn")) $("promptDismissBtn").addEventListener("click", hideReapplyPrompt);
+
+    // Dirty indicator — show "Unsaved changes" when the rule form is modified
+    const ruleDirtyHint = $("ruleDirtyHint");
+    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","categoryValue","baseRowValue","appliesTo","paygroupFilterValue","notesValue"];
+    const markDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = ""; };
+    const clearDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = "none"; };
+    ruleFormFields.forEach((id) => {
+      const el = $(id);
+      if (el) el.addEventListener("input",  markDirty);
+      if (el) el.addEventListener("change", markDirty);
+    });
+    // Clear dirty on successful save or clear
+    const origSaveRule = window.cashflowApp && window.cashflowApp.saveRule;
+    $("saveRuleBtn").addEventListener("click", clearDirty, { capture: false });
+    $("clearRuleBtn").addEventListener("click", clearDirty, { capture: false });
     if ($("generateMultiBtn")) $("generateMultiBtn").addEventListener("click", generateMultiMonthReport);
     if ($("exportMultiBtn"))   $("exportMultiBtn").addEventListener("click", exportMultiMonthReport);
     if ($("selectAllMonthsBtn")) $("selectAllMonthsBtn").addEventListener("click", () => {

@@ -525,7 +525,10 @@
             <div class="tablebox tall"><table id="exceptionsTable"></table></div>
           </div>
           <div class="panel">
-            <div class="panel-head">Add / Edit Rule</div>
+            <div class="panel-head">
+            Add / Edit Rule
+            <span class="hint" style="font-weight:400">Changes are <strong>not</strong> saved until you click <strong>Save Rule</strong></span>
+          </div>
             <div class="panel-body">
               <div class="reapply-prompt" id="reapplyPrompt">
                 <span style="flex:1">Rule saved — rebuild this month with the updated rules?</span>
@@ -582,6 +585,7 @@
                 <div class="action-bar">
                   <button class="btn btn-teal" id="saveRuleBtn">✓ Save Rule</button>
                   <button class="btn btn-ghost" id="clearRuleBtn">Clear</button>
+                  <span class="hint" id="ruleDirtyHint" style="display:none;color:#92400e;font-weight:600">● Unsaved changes</span>
                 </div>
               </div>
             </div>
