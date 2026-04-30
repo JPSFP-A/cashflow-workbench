@@ -34,7 +34,24 @@
     { rule_code: "RULE-0028", rule_type: "cashbook_cost_range", match_value: "395-395", category: "Bank Charge", base_case_row: "", applies_to: "cashbook_credit", paygroup_filter: "", notes: "Procedure: cashbook CI 395 bank charge (credit side, excluded from base case)", active: true },
     { rule_code: "RULE-0029", rule_type: "cashbook_cost_range", match_value: "912-912", category: "Interest Income", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: cashbook CI 912 interest income", active: true },
     { rule_code: "RULE-0030", rule_type: "description_contains", match_value: "JE27", category: "Cash Book", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: JE27 cash book entry", active: true },
-    { rule_code: "RULE-0031", rule_type: "description_contains", match_value: "JE 09MA", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE09MA transfer (excluded from base case)", active: true }
+    { rule_code: "RULE-0031", rule_type: "description_contains", match_value: "JE 09MA", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE09MA transfer (excluded from base case)", active: true },
+    // ── NEW rules from procedures update 27 Apr 2026 ──────────────────────────
+    { rule_code: "RULE-0032", rule_type: "description_contains", match_value: "JE 09TA", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE09TA transfer (excluded from base case)", active: true },
+    { rule_code: "RULE-0033", rule_type: "description_contains", match_value: "JE 26B", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE26B transfer (excluded from base case)", active: true },
+    { rule_code: "RULE-0034", rule_type: "fpc_equals", match_value: "12806", category: "Dividend", base_case_row: "Dividend Received", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: dividend received FERC 12806", active: true },
+    { rule_code: "RULE-0035", rule_type: "fpc_equals", match_value: "42101", category: "Dividend", base_case_row: "Dividend Received", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: dividend received FERC 42101", active: true },
+    { rule_code: "RULE-0036", rule_type: "cashbook_cost_range", match_value: "13101-13101", category: "Sinking Fund", base_case_row: "Long-term Debt Financing", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13101 NCB/Sinking Fund (JE26B < US$200K = Sinking Fund)", active: true },
+    { rule_code: "RULE-0037", rule_type: "cashbook_cost_range", match_value: "13102-13102", category: "Payroll", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13102 Payroll bank account", active: true },
+    { rule_code: "RULE-0038", rule_type: "cashbook_cost_range", match_value: "13104-13104", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13104 BNS Cheques / Transfer", active: true },
+    { rule_code: "RULE-0039", rule_type: "cashbook_cost_range", match_value: "13111-13111", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13111 Transfer", active: true },
+    { rule_code: "RULE-0040", rule_type: "cashbook_cost_range", match_value: "13118-13118", category: "Supplier", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13118 Supplier (FERC 13118)", active: true },
+    { rule_code: "RULE-0041", rule_type: "cashbook_cost_range", match_value: "13119-13119", category: "RBTT Cheques", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13119 RBTT Cheques", active: true },
+    { rule_code: "RULE-0042", rule_type: "cashbook_cost_range", match_value: "13123-13123", category: "Citibank Cheques", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13123 Citibank Cheques", active: true },
+    { rule_code: "RULE-0043", rule_type: "cashbook_cost_range", match_value: "13126-13126", category: "BNS F/X", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13126 BNS F/X Cheques", active: true },
+    { rule_code: "RULE-0044", rule_type: "cashbook_cost_range", match_value: "13129-13129", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13129 Transfer", active: true },
+    { rule_code: "RULE-0045", rule_type: "cashbook_cost_range", match_value: "13149-13149", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13149 Transfer", active: true },
+    { rule_code: "RULE-0046", rule_type: "cashbook_cost_range", match_value: "13175-13175", category: "Expense Cheques", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13175 Expense Cheques", active: true },
+    { rule_code: "RULE-0047", rule_type: "description_contains", match_value: "F/X PURCHASE", category: "F/X Purchase", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: F/X Purchase (Payables/Purchase source)", active: true }
   ];
 
   const state = {
@@ -517,7 +534,10 @@
     }
     if (records.length) {
       const chunkSize = 500;
-      for (let i = 0; i < records.length; i += chunkSize) {
+      const total = records.length;
+      for (let i = 0; i < total; i += chunkSize) {
+        const saved = Math.min(i + chunkSize, total);
+        setStatus(`Saving records… ${saved.toLocaleString()} / ${total.toLocaleString()}`, "");
         const chunk = records.slice(i, i + chunkSize).map((r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "" }));
         const { error } = await state.supabase.from("cashflow_records").insert(chunk);
         if (error) throw error;
@@ -539,7 +559,7 @@
     if (existing && !confirm(`${monthKey} already has saved data (last processed ${fmtDateTime(existing.last_processed_at)}). Overwrite?`)) return;
 
     setBusy(true);
-    setStatus("Processing files…", "");
+    setStatus("Reading files…", "");
     try {
       const uploads = {
         ap: await readFile($("apFile")),
@@ -547,16 +567,23 @@
         cashbook_account: await readFile($("cashbookAccountFile"))
       };
       const mappingCsv = await readFile($("mappingFile"));
-      if (mappingCsv) await importRulesFromCsv(mappingCsv);
-      const sourceRows = [...mergeCashbooks(uploads.cashbook_description, uploads.cashbook_account), ...parseAp(uploads.ap, "invoice_payments.txt")];
-      const processed = applyMappings(sourceRows, state.rules.length ? state.rules : defaultRules);
+      if (mappingCsv) { setStatus("Importing rules from CSV…", ""); await importRulesFromCsv(mappingCsv); }
+      setStatus("Parsing AP report and cashbook files…", "");
+      const cashbookRows = mergeCashbooks(uploads.cashbook_description, uploads.cashbook_account);
+      const apRows = parseAp(uploads.ap, "invoice_payments.txt");
+      const sourceRows = [...cashbookRows, ...apRows];
+      setStatus(`Parsed ${sourceRows.toLocaleString ? sourceRows.length.toLocaleString() : sourceRows.length} records (${apRows.length.toLocaleString()} AP + ${cashbookRows.length.toLocaleString()} cashbook). Applying rules…`, "");
+      const activeRules = state.rules.length ? state.rules : defaultRules;
+      const processed = applyMappings(sourceRows, activeRules);
+      const unmapped = processed.filter((r) => !r.mapped).length;
+      setStatus(`Mapped ${processed.length.toLocaleString()} records — ${unmapped} unmapped. Saving to database…`, "");
       state.records = processed;
       state.uploads = uploads;
       await saveMonthToDb(monthKey, uploads, processed);
       await loadMonths();
       await loadAudit();
       renderAll();
-      setStatus(`Saved ${monthKey} — ${processed.length} records`, "ok");
+      setStatus(`✓ Saved ${monthKey} — ${processed.length.toLocaleString()} records, ${unmapped} unmapped`, "ok");
     } catch (err) {
       setStatus(err.message, "error");
     } finally {
@@ -634,7 +661,11 @@
         const { data: uploadRows } = await state.supabase.from("cashflow_source_uploads").select("source_type,content_text").eq("month_id", month.id);
         rawUploads = Object.fromEntries((uploadRows || []).map((u) => [u.source_type, u.content_text]));
       }
-      const sourceRows = [...mergeCashbooks(rawUploads.cashbook_description, rawUploads.cashbook_account), ...parseAp(rawUploads.ap || "", "invoice_payments.txt")];
+      setStatus("Parsing saved source files…", "");
+      const cbRows = mergeCashbooks(rawUploads.cashbook_description, rawUploads.cashbook_account);
+      const apRows2 = parseAp(rawUploads.ap || "", "invoice_payments.txt");
+      const sourceRows = [...cbRows, ...apRows2];
+      setStatus(`Applying ${state.rules.length} rules to ${sourceRows.length.toLocaleString()} records…`, "");
       state.records = applyMappings(sourceRows, state.rules);
       state.uploads = rawUploads;
       await saveMonthToDb(monthKey, rawUploads, state.records);
