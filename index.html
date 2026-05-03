@@ -28,7 +28,7 @@
       --radius-sm: 6px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', system-ui, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; min-height: 100vh; }
 
     /* ── Welcome screen ───────────────────────────────────────────── */
     #welcomeScreen {
@@ -92,7 +92,7 @@
     .welcome-hint span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); margin-right: 5px; vertical-align: middle; }
 
     /* ── App shell ────────────────────────────────────────────────── */
-    #appShell { display: none; flex-direction: column; min-height: 100vh; }
+    #appShell { display: none; flex-direction: row; flex: 1; min-height: 0; }
     #appShell.visible { display: flex; }
 
     header {
@@ -442,6 +442,36 @@
     .theme-btn.active { border-color:rgba(245,158,11,.8); background:rgba(255,255,255,.15); color:#fff; font-weight:700; }
     .theme-btn.propel-active { background:#F59E0B; color:#0A0F1E; border-color:#F59E0B; }
 
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    .cwb-sidebar {
+      width: 220px; min-width: 220px;
+      background: #0d1525;
+      display: flex; flex-direction: column;
+      border-right: 1px solid rgba(255,255,255,0.05);
+      overflow-y: auto; flex-shrink: 0;
+    }
+    .cwb-sidebar .sb-header { padding: 18px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .cwb-sidebar .sb-app-name { font-size: 10px; font-weight: 700; color: #5A6FA8; text-transform: uppercase; letter-spacing: .08em; }
+    .cwb-sidebar .sb-title { font-size: 15px; font-weight: 700; color: #fff; margin-top: 2px; }
+    .cwb-sidebar .sb-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 700; background: rgba(245,158,11,.15); color: #FBB024; border: 1px solid rgba(245,158,11,.25); }
+    .cwb-sidebar .sb-search { margin: 10px 12px; position: relative; }
+    .cwb-sidebar .sb-search input { width: 100%; padding: 7px 10px 7px 28px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; color: #B8C5DC; font-size: 11px; outline: none; font-family: inherit; }
+    .cwb-sidebar .sb-search input::placeholder { color: #5A6FA8; }
+    .cwb-sidebar .sb-search .si { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: #5A6FA8; font-size: 11px; }
+    .cwb-sidebar .sb-section { padding: 8px 0; }
+    .cwb-sidebar .sb-label { font-size: 9px; font-weight: 700; color: #3B4F8C; text-transform: uppercase; letter-spacing: .1em; padding: 0 16px 5px; }
+    .cwb-nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; cursor: pointer; color: #8A9EC4; font-size: 12px; font-weight: 500; transition: all .12s; border-left: 2px solid transparent; white-space: nowrap; }
+    .cwb-nav-item:hover { background: rgba(255,255,255,.04); color: #DDE4EF; }
+    .cwb-nav-item.active { background: rgba(245,158,11,.08); color: #FBB024; border-left-color: #F59E0B; }
+    .cwb-nav-item .ni-icon { width: 16px; text-align: center; font-size: 13px; flex-shrink: 0; }
+    .cwb-nav-item .ni-badge { margin-left: auto; background: #F59E0B; color: #0A0F1E; font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 20px; }
+    .cwb-sidebar .sb-footer { margin-top: auto; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,.05); }
+    .cwb-sidebar .sb-user { display: flex; align-items: center; gap: 9px; }
+    .cwb-sidebar .sb-avatar { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg, #D97706, #F59E0B); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0A0F1E; }
+    .cwb-sidebar .sb-user-name { font-size: 11px; font-weight: 600; color: #B8C5DC; }
+    .cwb-sidebar .sb-user-role { font-size: 10px; color: #5A6FA8; }
+    .cwb-right { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
+
     /* ── Responsive ───────────────────────────────────────────────── */
     @media (max-width: 1100px) {
       .grid-3, .grid-2 { grid-template-columns: 1fr; }
@@ -457,6 +487,17 @@
   </style>
 </head>
 <body>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       APP-SWITCHER BAR (shown after login)
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="appSwitcher" style="display:none;height:38px;background:#060c18;border-bottom:1px solid rgba(255,255,255,0.05);align-items:center;padding:0 12px;gap:4px;flex-shrink:0;z-index:200;position:relative;">
+    <a href="https://jps-fp-a.vercel.app" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">📊 FP&amp;A</a>
+    <a href="https://propel-delta.vercel.app" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">🏗 Propel</a>
+    <a href="https://sales-forecast-jps.vercel.app" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ Sales</a>
+    <a href="#" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;background:rgba(245,158,11,0.1);color:#FBB024;border:1px solid rgba(245,158,11,0.25);text-decoration:none;">💧 Cashflow</a>
+    <span style="margin-left:auto;font-size:10px;color:#3B4F8C;">⚡ JPS Financial Systems</span>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
        WELCOME SCREEN
@@ -483,6 +524,42 @@
        APP SHELL (hidden until welcome is dismissed)
   ═══════════════════════════════════════════════════════════════ -->
   <div id="appShell">
+
+    <!-- ── Left sidebar ── -->
+    <div class="cwb-sidebar">
+      <div class="sb-header">
+        <div class="sb-app-name">JPS FP&amp;A</div>
+        <div class="sb-title">Cashflow WB</div>
+        <span class="sb-badge" id="cwbMonthBadge">— select month —</span>
+      </div>
+      <div class="sb-search">
+        <span class="si">🔍</span>
+        <input placeholder="Search rules…" oninput="filterRulesSearch(this.value)"/>
+      </div>
+      <div class="sb-section">
+        <div class="sb-label">Workbench</div>
+        <div class="cwb-nav-item active" onclick="cwbNav('outflows',this)"><span class="ni-icon">📤</span>Outflow Validation</div>
+        <div class="cwb-nav-item" onclick="cwbNav('exceptions',this)"><span class="ni-icon">🔍</span>Map Exceptions<span class="ni-badge" id="sideExcBadge" style="display:none"></span></div>
+        <div class="cwb-nav-item" onclick="cwbNav('base',this)"><span class="ni-icon">📋</span>Base Case</div>
+        <div class="cwb-nav-item" onclick="cwbNav('rules',this)"><span class="ni-icon">⚙</span>Rules</div>
+        <div class="cwb-nav-item" onclick="cwbNav('audit',this)"><span class="ni-icon">📜</span>Audit Log</div>
+        <div class="cwb-nav-item" onclick="cwbNav('multimonth',this)"><span class="ni-icon">📊</span>Multi-Month Report</div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-label">Admin</div>
+        <div class="cwb-nav-item" onclick="cwbNav('admin',this)"><span class="ni-icon">🗓</span>Month Manager</div>
+        <div class="cwb-nav-item" onclick="cwbNav('instructions',this)"><span class="ni-icon">❓</span>Instructions</div>
+      </div>
+      <div class="sb-footer">
+        <div class="sb-user">
+          <div class="sb-avatar" id="cwbSideAvatar">?</div>
+          <div><div class="sb-user-name" id="cwbSideName">—</div><div class="sb-user-role">FP&amp;A Team</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right column (header + tabs + panels) ── -->
+    <div class="cwb-right">
 
     <header>
       <div class="header-brand">
@@ -855,6 +932,7 @@
       </div>
 
     </main>
+    </div><!-- /cwb-right -->
   </div><!-- /appShell -->
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -902,6 +980,44 @@
     })();
   </script>
   <script>
+    // ── Sidebar navigation ────────────────────────────────────────
+    function cwbNav(tabId, el) {
+      // Switch tab panel
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      const panel = document.getElementById(tabId);
+      if (panel) panel.classList.add('active');
+      // Find matching tab-btn
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        if (b.dataset.tab === tabId) b.classList.add('active');
+      });
+      // Sidebar active state
+      document.querySelectorAll('.cwb-nav-item').forEach(n => n.classList.remove('active'));
+      if (el) el.classList.add('active');
+    }
+
+    // Keep sidebar nav in sync when tab-btns are clicked directly
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const tabId = this.dataset.tab;
+        document.querySelectorAll('.cwb-nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.cwb-nav-item').forEach(n => {
+          if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + tabId + "'")) {
+            n.classList.add('active');
+          }
+        });
+      });
+    });
+
+    // Sidebar search proxies to the Rules tab search input
+    function filterRulesSearch(val) {
+      const rulesInput = document.getElementById('rulesSearch');
+      if (rulesInput) {
+        rulesInput.value = val;
+        rulesInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+
     // ── Welcome screen — Supabase Auth login ─────────────────────
     (function () {
       const welcomeScreen = document.getElementById("welcomeScreen");
@@ -931,10 +1047,17 @@
 
       function launch(name) {
         setUser(name);
+        // Sync sidebar avatar and name
+        const ini = (name || '').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+        const av = document.getElementById('cwbSideAvatar');
+        const nm = document.getElementById('cwbSideName');
+        if (av) av.textContent = ini || '?';
+        if (nm) nm.textContent = name || '—';
         welcomeScreen.classList.add("hiding");
         setTimeout(() => {
           welcomeScreen.style.display = "none";
           appShell.classList.add("visible");
+          document.getElementById('appSwitcher').style.display = 'flex';
         }, 440);
       }
 
@@ -1063,6 +1186,39 @@
         bar.classList.toggle("visible", bar.style.display !== "none");
       });
       styleObs.observe(bar, { attributes: true, attributeFilter: ["style"] });
+    })();
+
+    // ── Exception badge sync (mirrors #excBadge → #sideExcBadge) ─
+    (function () {
+      const excBadge  = document.getElementById("excBadge");
+      const sideBadge = document.getElementById("sideExcBadge");
+      if (!excBadge || !sideBadge) return;
+      const sync = () => {
+        const val = excBadge.textContent.trim();
+        const visible = excBadge.classList.contains("show");
+        sideBadge.textContent = val;
+        sideBadge.style.display = visible ? "inline-block" : "none";
+      };
+      new MutationObserver(sync).observe(excBadge, { childList: true, subtree: true, attributes: true, characterData: true });
+    })();
+
+    // ── Month badge sync (mirrors selected month → #cwbMonthBadge) ─
+    (function () {
+      const monthInput  = document.getElementById("monthInput");
+      const monthBadge  = document.getElementById("cwbMonthBadge");
+      if (!monthInput || !monthBadge) return;
+      const updateBadge = () => {
+        const val = monthInput.value;
+        monthBadge.textContent = val
+          ? new Date(val + "-02").toLocaleDateString("en-US", { month: "short", year: "numeric" })
+          : "— select month —";
+      };
+      monthInput.addEventListener("change", updateBadge);
+      monthInput.addEventListener("input",  updateBadge);
+      // Also watch for programmatic changes (app.js setting the value)
+      new MutationObserver(updateBadge).observe(monthInput, { attributes: true, attributeFilter: ["value"] });
+      // Poll once on load in case app.js populates it after DOMContentLoaded
+      setTimeout(updateBadge, 500);
     })();
   </script>
 </body>
