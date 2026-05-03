@@ -4,33 +4,36 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cashflow Workbench — JPS FP&amp;A</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     /* ── Tokens ───────────────────────────────────────────────────── */
     :root {
-      --navy:   #0f2744;
-      --blue:   #174a7c;
-      --blue2:  #1d5c99;
-      --teal:   #0f766e;
-      --red:    #b91c1c;
-      --amber:  #92400e;
-      --gold:   #8a5b00;
-      --ink:    #17202a;
-      --muted:  #5e6875;
-      --line:   #dce4ed;
-      --soft:   #f4f7fb;
+      --navy:   #1A2540;
+      --blue:   #243059;
+      --blue2:  #2E3D72;
+      --teal:   #16A34A;
+      --red:    #B91C1C;
+      --amber:  #D97706;
+      --gold:   #D97706;
+      --ink:    #0F172A;
+      --muted:  #64748B;
+      --line:   #E2E8F0;
+      --soft:   #F8FAFC;
       --white:  #ffffff;
-      --shadow: 0 2px 12px rgba(15,39,68,.10), 0 1px 3px rgba(15,39,68,.06);
-      --shadow-lg: 0 12px 40px rgba(15,39,68,.22), 0 4px 12px rgba(15,39,68,.12);
+      --shadow: 0 2px 12px rgba(26,37,64,.08), 0 1px 3px rgba(26,37,64,.05);
+      --shadow-lg: 0 12px 40px rgba(26,37,64,.18), 0 4px 12px rgba(26,37,64,.10);
       --radius: 10px;
       --radius-sm: 6px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Segoe UI", system-ui, Arial, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 
     /* ── Welcome screen ───────────────────────────────────────────── */
     #welcomeScreen {
       position: fixed; inset: 0; z-index: 9999;
-      background: linear-gradient(145deg, #061624 0%, #0f2744 45%, #174a7c 100%);
+      background: linear-gradient(145deg, #0A0F1E 0%, #1A2540 45%, #243059 100%);
       display: flex; align-items: center; justify-content: center;
       padding: 24px;
     }
@@ -70,7 +73,7 @@
       outline: none; transition: border-color .15s, box-shadow .15s;
       color: var(--ink);
     }
-    .welcome-form input:focus { border-color: var(--blue2); box-shadow: 0 0 0 3px rgba(23,74,124,.12); }
+    .welcome-form input:focus { border-color: var(--blue2); box-shadow: 0 0 0 3px rgba(26,37,64,.10); }
     .welcome-form input.shake { animation: shake .35s ease; }
     @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
 
@@ -198,9 +201,9 @@
     }
     .btn:active { transform: scale(.97); }
     .btn:disabled { opacity: .4; cursor: default; transform: none; }
-    .btn-primary { background: var(--blue); color: white; border-color: var(--blue); box-shadow: 0 2px 8px rgba(23,74,124,.25); }
-    .btn-primary:hover:not(:disabled) { background: var(--blue2); border-color: var(--blue2); }
-    .btn-teal   { background: var(--teal); color: white; border-color: var(--teal); box-shadow: 0 2px 8px rgba(15,118,110,.25); }
+    .btn-primary { background: var(--navy); color: white; border-color: var(--navy); box-shadow: 0 2px 8px rgba(26,37,64,.20); }
+    .btn-primary:hover:not(:disabled) { background: var(--blue); border-color: var(--blue); }
+    .btn-teal   { background: var(--teal); color: white; border-color: var(--teal); box-shadow: 0 2px 8px rgba(22,163,74,.25); }
     .btn-teal:hover:not(:disabled) { opacity: .88; }
     .btn-ghost  { background: var(--soft); color: var(--ink); border-color: var(--line); }
     .btn-ghost:hover:not(:disabled) { background: #e9eef5; }
@@ -216,8 +219,8 @@
     /* ── Month status bar ─────────────────────────────────────────── */
     .month-bar {
       display: none;
-      background: linear-gradient(90deg, #eef6ff 0%, #f4f9ff 100%);
-      border: 1px solid #bfdbfe; border-radius: var(--radius);
+      background: linear-gradient(90deg, #F0F3F8 0%, #F8FAFC 100%);
+      border: 1px solid #B8C5DC; border-radius: var(--radius);
       padding: 10px 18px; margin-bottom: 16px;
       font-size: 13px; gap: 16px; align-items: center; flex-wrap: wrap;
     }
@@ -237,7 +240,7 @@
     }
     .kpi-tile .kpi-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
     .kpi-tile .kpi-icon { font-size: 18px; line-height: 1; }
-    .kpi-tile .kpi-value { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .kpi-tile .kpi-value { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; line-height: 1.1; font-family: 'DM Mono', monospace; }
     .kpi-tile.warn .kpi-value { color: var(--gold); }
     .kpi-tile.bad  .kpi-value { color: var(--red); }
     .kpi-tile.good .kpi-value { color: var(--teal); }
@@ -258,8 +261,8 @@
     }
     .tab-btn:hover { background: var(--soft); color: var(--ink); }
     .tab-btn.active {
-      background: var(--blue); color: white;
-      box-shadow: 0 2px 8px rgba(23,74,124,.25);
+      background: var(--navy); color: white;
+      box-shadow: 0 2px 8px rgba(26,37,64,.25);
     }
     .tab-badge {
       background: var(--red); color: white;
@@ -393,6 +396,52 @@
     .status-chip.open     { background: #fffbeb; color: var(--gold); border: 1px solid #fcd34d; }
     .status-chip.approved { background: #d1fae5; color: var(--teal); border: 1px solid #6ee7b7; }
 
+    /* ── Theme overrides ─────────────────────────────────────────── */
+    /* Default = Propel (navy + amber) */
+    [data-theme="jps"] {
+      --navy: #003DA5; --blue: #002D82; --blue2: #004FBF;
+    }
+    [data-theme="jps"] .tab-btn.active { background: #003DA5; box-shadow: 0 2px 8px rgba(0,61,165,.25); }
+    [data-theme="jps"] .btn-primary { background: #003DA5; border-color: #003DA5; }
+    [data-theme="jps"] .btn-primary:hover:not(:disabled) { background: #002D82; border-color: #002D82; }
+    [data-theme="jps"] #welcomeBtn { background: linear-gradient(135deg,#003DA5,#004FBF); box-shadow: 0 4px 14px rgba(0,61,165,.30); }
+    [data-theme="jps"] #welcomeScreen { background: linear-gradient(145deg,#001028 0%,#003DA5 55%,#001028 100%); }
+
+    [data-theme="light"] {
+      --navy: #1E40AF; --blue: #2563EB; --blue2: #3B82F6;
+      --soft: #F8FAFC; --line: #E2E8F0;
+    }
+
+    [data-theme="dark"] {
+      --navy: #5A6FA8; --blue: #8A9EC4; --blue2: #8A9EC4;
+      --ink: #E2E8F0; --muted: #94A3B8; --line: #334155;
+      --soft: #0F172A; --white: #1E293B; --teal: #4ADE80;
+      --shadow: 0 2px 12px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.2);
+    }
+    [data-theme="dark"] body { background: #0F172A; color: #E2E8F0; }
+    [data-theme="dark"] .workspace-card, [data-theme="dark"] .panel { background: #1E293B; }
+    [data-theme="dark"] .panel-head { background: #273347; border-color: #334155; }
+    [data-theme="dark"] .kpi-tile { background: #1E293B; border-color: #334155; }
+    [data-theme="dark"] .tab-nav { background: #1E293B; border-color: #334155; }
+    [data-theme="dark"] th { background: #273347; color: #94A3B8; border-color: #334155; }
+    [data-theme="dark"] td, [data-theme="dark"] th { border-color: #334155; }
+    [data-theme="dark"] tr:hover td { background: #273347; }
+    [data-theme="dark"] .form-field input, [data-theme="dark"] .form-field select,
+    [data-theme="dark"] .form-field textarea,
+    [data-theme="dark"] .search-bar input, [data-theme="dark"] .search-bar select,
+    [data-theme="dark"] .month-selectors input, [data-theme="dark"] .month-selectors select
+    { background: #273347; color: #E2E8F0; border-color: #475569; }
+    [data-theme="dark"] .btn-ghost { background: #273347; color: #CBD5E1; border-color: #475569; }
+    [data-theme="dark"] .month-bar { background: linear-gradient(90deg,#1E293B,#273347); border-color: #334155; }
+
+    /* ── Theme toggle styles ──────────────────────────────────────── */
+    .theme-toggle { display:flex; align-items:center; gap:1px; background:rgba(0,0,0,.25); border-radius:8px; padding:2px 3px; border:1px solid rgba(255,255,255,.12); }
+    .tt-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,255,255,.4); padding:0 6px; }
+    .theme-btn { display:flex; align-items:center; gap:3px; padding:4px 8px; border-radius:6px; border:1px solid transparent; background:transparent; color:rgba(255,255,255,.5); font-size:11px; cursor:pointer; transition:all .12s; font-family:inherit; }
+    .theme-btn:hover { color:rgba(255,255,255,.85); background:rgba(255,255,255,.1); }
+    .theme-btn.active { border-color:rgba(245,158,11,.8); background:rgba(255,255,255,.15); color:#fff; font-weight:700; }
+    .theme-btn.propel-active { background:#F59E0B; color:#0A0F1E; border-color:#F59E0B; }
+
     /* ── Responsive ───────────────────────────────────────────────── */
     @media (max-width: 1100px) {
       .grid-3, .grid-2 { grid-template-columns: 1fr; }
@@ -419,11 +468,14 @@
       <p class="welcome-sub">JPS Financial Planning &amp; Analysis</p>
       <hr class="welcome-divider">
       <div class="welcome-form">
-        <label for="welcomeNameInput">Your full name</label>
-        <input id="welcomeNameInput" placeholder="e.g. Jane Smith" autocomplete="name" autocapitalize="words">
-        <button id="welcomeBtn">Enter Workbench →</button>
+        <label for="welcomeEmail">Email</label>
+        <input id="welcomeEmail" type="email" placeholder="you@jpsco.com" autocomplete="email">
+        <label for="welcomePwd" style="margin-top:12px">Password</label>
+        <input id="welcomePwd" type="password" placeholder="••••••••" autocomplete="current-password">
+        <button id="welcomeBtn" style="margin-top:14px">Sign In →</button>
+        <div id="authErr" style="color:var(--red,#B91C1C);font-size:12px;margin-top:10px;display:none;text-align:left;line-height:1.4"></div>
       </div>
-      <p class="welcome-hint"><span></span>Your name is recorded on every upload, rule change, and audit log entry.</p>
+      <p class="welcome-hint"><span></span>Sign in with your JPS account. Contact your administrator to request access.</p>
     </div>
   </div>
 
@@ -441,6 +493,14 @@
         </div>
       </div>
       <div class="header-right">
+        <!-- Theme toggle -->
+        <div class="theme-toggle" id="themeToggle">
+          <span class="tt-label">Theme</span>
+          <button class="theme-btn" data-theme="dark"   onclick="setTheme('dark')">☾ Dark</button>
+          <button class="theme-btn" data-theme="light"  onclick="setTheme('light')">✦ Light</button>
+          <button class="theme-btn" data-theme="jps"    onclick="setTheme('jps')">⚡ JPS</button>
+          <button class="theme-btn active propel-active" data-theme="propel" onclick="setTheme('propel')">◆ Propel</button>
+        </div>
         <div class="user-badge" id="userBadge" title="Click to change name">
           <div class="user-avatar" id="userAvatar">?</div>
           <span class="user-name" id="userNameDisplay">—</span>
@@ -820,16 +880,44 @@
   <script src="./config.js"></script>
   <script src="./app.js"></script>
   <script>
-    // ── Welcome screen logic ──────────────────────────────────────
+    // ── Theme management ──────────────────────────────────────────
+    const THEME_KEY = 'cwb-theme';
+    function setTheme(t) {
+      if (t === 'propel') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', t);
+      }
+      localStorage.setItem(THEME_KEY, t);
+      document.querySelectorAll('.theme-btn').forEach(btn => {
+        const active = btn.dataset.theme === t;
+        btn.classList.toggle('active', active);
+        btn.classList.toggle('propel-active', active && t === 'propel');
+      });
+    }
+    // Init theme
+    (function() {
+      const saved = localStorage.getItem(THEME_KEY) || 'propel';
+      setTheme(saved);
+    })();
+  </script>
+  <script>
+    // ── Welcome screen — Supabase Auth login ─────────────────────
     (function () {
       const welcomeScreen = document.getElementById("welcomeScreen");
       const appShell      = document.getElementById("appShell");
-      const welcomeInput  = document.getElementById("welcomeNameInput");
       const welcomeBtn    = document.getElementById("welcomeBtn");
       const nameInput     = document.getElementById("nameInput");
       const userAvatar    = document.getElementById("userAvatar");
       const userNameDisp  = document.getElementById("userNameDisplay");
       const userBadge     = document.getElementById("userBadge");
+      const authErr       = document.getElementById("authErr");
+
+      // Shared Supabase client (public schema for auth; admin schema queries use .schema())
+      const sb = window.supabase.createClient(
+        window.APP_CONFIG.supabaseUrl,
+        window.APP_CONFIG.supabaseAnonKey
+      );
 
       function initials(name) {
         return name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join("");
@@ -839,7 +927,6 @@
         nameInput.value = name;
         userAvatar.textContent = initials(name);
         userNameDisp.textContent = name;
-        sessionStorage.setItem("cwbUser", name);
       }
 
       function launch(name) {
@@ -851,35 +938,80 @@
         }, 440);
       }
 
-      function tryLaunch() {
-        const name = welcomeInput.value.trim();
-        if (!name) {
-          welcomeInput.classList.add("shake");
-          welcomeInput.focus();
-          setTimeout(() => welcomeInput.classList.remove("shake"), 400);
-          return;
-        }
-        launch(name);
+      function showErr(msg) {
+        authErr.textContent = msg;
+        authErr.style.display = "block";
       }
 
-      welcomeBtn.addEventListener("click", tryLaunch);
-      welcomeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") tryLaunch(); });
+      async function checkAccessAndLaunch(userId, email) {
+        // Check admin.app_access for cashflow
+        const { data: access } = await sb.schema("admin").from("app_access")
+          .select("can_access, role")
+          .eq("user_id", userId)
+          .eq("app_id", "cashflow")
+          .maybeSingle();
 
-      // Click the user badge in the header to change name (returns to welcome screen)
-      userBadge.addEventListener("click", () => {
-        welcomeInput.value = nameInput.value;
-        welcomeScreen.style.display = "";
-        welcomeScreen.classList.remove("hiding");
-        welcomeScreen.style.opacity = "";
-        appShell.classList.remove("visible");
-        setTimeout(() => welcomeInput.select(), 50);
+        if (!access || !access.can_access) {
+          await sb.auth.signOut();
+          showErr("You don't have access to the Cashflow Workbench. Contact your administrator.");
+          welcomeBtn.disabled = false;
+          welcomeBtn.textContent = "Sign In →";
+          return false;
+        }
+
+        // Get display name from admin.user_profiles
+        const { data: profile } = await sb.schema("admin").from("user_profiles")
+          .select("full_name")
+          .eq("id", userId)
+          .maybeSingle();
+
+        launch(profile?.full_name || email);
+        return true;
+      }
+
+      async function tryLogin() {
+        const email = document.getElementById("welcomeEmail").value.trim();
+        const pwd   = document.getElementById("welcomePwd").value;
+        if (!email || !pwd) { showErr("Email and password are required"); return; }
+
+        authErr.style.display = "none";
+        welcomeBtn.disabled = true;
+        welcomeBtn.textContent = "Signing in…";
+
+        const { data, error } = await sb.auth.signInWithPassword({ email, password: pwd });
+        if (error) {
+          showErr(error.message);
+          welcomeBtn.disabled = false;
+          welcomeBtn.textContent = "Sign In →";
+          return;
+        }
+
+        await checkAccessAndLaunch(data.user.id, data.user.email);
+      }
+
+      // Sign out when clicking user badge
+      userBadge.addEventListener("click", async () => {
+        if (confirm("Sign out of the Cashflow Workbench?")) {
+          await sb.auth.signOut();
+          location.reload();
+        }
       });
 
-      // Pre-fill from previous session
-      const saved = sessionStorage.getItem("cwbUser");
-      if (saved) welcomeInput.value = saved;
+      welcomeBtn.addEventListener("click", tryLogin);
+      document.getElementById("welcomePwd").addEventListener("keydown",
+        e => { if (e.key === "Enter") tryLogin(); });
+      document.getElementById("welcomeEmail").addEventListener("keydown",
+        e => { if (e.key === "Enter") document.getElementById("welcomePwd").focus(); });
 
-      welcomeInput.focus();
+      // Auto-login if session already exists
+      (async () => {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+          await checkAccessAndLaunch(session.user.id, session.user.email);
+          return;
+        }
+        document.getElementById("welcomeEmail").focus();
+      })();
     })();
 
     // ── Status box adapter (maps app.js setStatus to pill styling) ─
