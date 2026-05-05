@@ -2,13 +2,18 @@
   const fmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   // Base rows are derived from rules (user-defined), not hardcoded here.
-  // Returns unique base_case_row values in the order they appear in state.rules,
-  // then any extras from state.records that don't appear in any rule.
+  // Returns unique base_case_row values:
+  //   1. Rule-defined order (from state.rules)
+  //   2. Sub-group lookup entries not already covered (sorted)
+  //   3. Any extra from loaded records not already covered (sorted)
   function liveBaseRows() {
-    const fromRules = [...new Set(state.rules.map((r) => r.base_case_row).filter(Boolean))];
-    const fromRecords = [...new Set(state.records.map((r) => r.base_case_row).filter(Boolean))];
-    const extra = fromRecords.filter((r) => !fromRules.includes(r)).sort();
-    return [...fromRules, ...extra];
+    const fromRules    = [...new Set(state.rules.map((r) => r.base_case_row).filter(Boolean))];
+    const fromSubGroups = [...new Set(state.subGroups.map((sg) => sg.base_case_row).filter(Boolean))];
+    const fromRecords  = [...new Set(state.records.map((r) => r.base_case_row).filter(Boolean))];
+    const seen = new Set(fromRules);
+    const extraSg  = fromSubGroups.filter((r) => !seen.has(r) && (seen.add(r), true)).sort();
+    const extraRec = fromRecords.filter((r) => !seen.has(r)).sort();
+    return [...fromRules, ...extraSg, ...extraRec];
   }
 
 
@@ -745,7 +750,7 @@
       .order("base_case_row").order("sort_order", { ascending: true, nullsFirst: false }).order("sub_group");
     if (error) return setStatus(error.message, "error");
     state.subGroups = data || [];
-    filterSubGroupByBaseRow();
+    refreshFormDropdowns(); // rebuild base-row selects now that subGroups are available
     renderSubGroupsAdmin();
   }
 
