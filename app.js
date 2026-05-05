@@ -1,6 +1,15 @@
 (function () {
   const fmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const baseRows = ["Collections", "Long-term Debt Financing", "Insurance Proceeds-Melissa", "Other receipts (GCT Reimbursement)", "Dividend Received", "Fuel", "IPP", "Payroll & Related", "Supplier/Contractor", "Motor Vehicle Transport", "Customs", "Taxes", "Inventory", "Insurance", "Equity Investment", "Loan Principal", "Loan Interest & Fees", "Hurricane Melissa Restoration", "Phase 2 Restoration", "T&D Rebuild", "Dividends Paid"];
+
+  // Base rows are derived from rules (user-defined), not hardcoded here.
+  // Returns unique base_case_row values in the order they appear in state.rules,
+  // then any extras from state.records that don't appear in any rule.
+  function liveBaseRows() {
+    const fromRules = [...new Set(state.rules.map((r) => r.base_case_row).filter(Boolean))];
+    const fromRecords = [...new Set(state.records.map((r) => r.base_case_row).filter(Boolean))];
+    const extra = fromRecords.filter((r) => !fromRules.includes(r)).sort();
+    return [...fromRules, ...extra];
+  }
 
 
   const state = {
@@ -311,10 +320,11 @@
       catMap.set(cat, cur);
     });
 
-    // Sort: canonical baseRows order, then any extras alphabetically
+    // Sort: rule-defined order (liveBaseRows), then any extras alphabetically
+    const ordered = liveBaseRows();
     const sortedBc = [
-      ...baseRows.filter((bc) => bcMap.has(bc)),
-      ...[...bcMap.keys()].filter((bc) => !baseRows.includes(bc)).sort()
+      ...ordered.filter((bc) => bcMap.has(bc)),
+      ...[...bcMap.keys()].filter((bc) => !ordered.includes(bc)).sort()
     ];
 
     const selBc  = state.baseDetailFilter?.base_case_row;
@@ -493,6 +503,28 @@
     ], rows);
   }
 
+  // Rebuild all rule-form dropdowns from live rule data — no hardcoded lists
+  function refreshFormDropdowns() {
+    const baseRowSel = $("baseRowValue");
+    if (baseRowSel) {
+      const cur = baseRowSel.value;
+      baseRowSel.innerHTML = `<option value="">Leave unassigned</option>${liveBaseRows().map((r) => `<option>${esc(r)}</option>`).join("")}`;
+      baseRowSel.value = cur; // restore selection if still valid
+    }
+    const mainGroupSel = $("mainGroupValue");
+    if (mainGroupSel) {
+      const cur = mainGroupSel.value;
+      const groups = [...new Set(state.rules.map((r) => r.main_group).filter(Boolean))].sort();
+      mainGroupSel.innerHTML = `<option value="">— Select —</option>${groups.map((g) => `<option>${esc(g)}</option>`).join("")}`;
+      mainGroupSel.value = cur;
+    }
+    const subGroupList = $("subGroupList");
+    if (subGroupList) {
+      const subs = [...new Set(state.rules.map((r) => r.sub_group).filter(Boolean))].sort();
+      subGroupList.innerHTML = subs.map((s) => `<option>${esc(s)}</option>`).join("");
+    }
+  }
+
   function renderRules() {
     const q = norm($("rulesSearch") ? $("rulesSearch").value : "");
     const filtered = q
@@ -649,6 +681,7 @@
     if (error) return setStatus(error.message, "error");
     state.rules = data || [];
     renderRules();
+    refreshFormDropdowns(); // rebuild dropdowns from live rule data
   }
 
   async function loadMonths() {
@@ -1130,7 +1163,7 @@
     $("ruleCodeValue").value = "";
     $("ruleType").value = row.vendor ? "vendor_contains" : row.pay_group ? "paygroup_contains" : row.fpc ? "fpc_equals" : "description_contains";
     $("matchValue").value = row.vendor || row.pay_group || row.fpc || String(row.description || "").split(" ").slice(0, 4).join(" ");
-    $("categoryValue").value = row.cashbook_category === "Unmapped" ? "" : row.cashbook_category;
+    $("categoryValue").value = row.mapped ? (row.cashbook_category || "") : "";
     $("baseRowValue").value = row.base_case_row || "";
     $("appliesTo").value = row.data_source === "Invoice Payments" ? "ap" : row.role === "Inflow" ? "cashbook_debit" : "cashbook_credit";
     $("notesValue").value = `Created from ${recordKey}`;
@@ -1290,8 +1323,8 @@
         byMonth.set(mKey, (byMonth.get(mKey) || 0) + amt);
         // sub-level — use pay_group for AP, sub_group for cashbook
         const subKey = r.data_source === "Invoice Payments"
-          ? (r.pay_group || "Other AP")
-          : (r.sub_group || r.cashbook_category || "Other");
+          ? (r.pay_group || "(No Pay Group)")
+          : (r.sub_group || r.cashbook_category || "(Uncategorised)");
         if (!subSums.has(r.base_case_row)) subSums.set(r.base_case_row, new Map());
         const catMap = subSums.get(r.base_case_row);
         if (!catMap.has(subKey)) catMap.set(subKey, new Map());
@@ -1302,8 +1335,9 @@
       // Sort months chronologically
       const sortedKeys = selectedKeys.slice().sort();
 
-      // Build rows in baseRows order, then any extra rows not in baseRows
-      const orderedRows = [...baseRows, ...[...sums.keys()].filter((k) => !baseRows.includes(k))];
+      // Build rows in rule-defined order, then any extra rows alphabetically
+      const orderedBase = liveBaseRows();
+      const orderedRows = [...orderedBase, ...[...sums.keys()].filter((k) => !orderedBase.includes(k))];
       const reportRows = orderedRows
         .filter((row) => sums.has(row))
         .map((row) => {
@@ -1596,7 +1630,7 @@
   }
 
   function bindUi() {
-    $("baseRowValue").innerHTML = `<option value="">Leave unassigned</option>${baseRows.map((r) => `<option>${esc(r)}</option>`).join("")}`;
+    refreshFormDropdowns();
     $("monthInput").value = new Date().toISOString().slice(0, 7);
     bindTabs();
     $("processBtn").addEventListener("click", processAndSaveMonth);

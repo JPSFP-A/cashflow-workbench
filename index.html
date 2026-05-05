@@ -814,37 +814,16 @@
                 </div>
                 <div class="form-field">
                   <label>Main Group</label>
+                  <!-- Options populated dynamically from live rules by refreshFormDropdowns() -->
                   <select id="mainGroupValue">
                     <option value="">— Select —</option>
-                    <option>Inflows</option>
-                    <option>Operating Outflows</option>
-                    <option>Capital Outflows</option>
-                    <option>Financing</option>
-                    <option>Non-Cash / Transfers</option>
                   </select>
                 </div>
                 <div class="form-field" id="subGroupRow">
                   <label>Sub Group <span class="hint" style="font-weight:400">(cashbook rules only — AP uses pay group automatically)</span></label>
-                  <input id="subGroupValue" list="subGroupList" placeholder="Select or type a new group…" autocomplete="off">
-                  <datalist id="subGroupList">
-                    <option>Collections</option>
-                    <option>Treasury &amp; F/X</option>
-                    <option>Investment Income</option>
-                    <option>Energy &amp; Power</option>
-                    <option>Personnel</option>
-                    <option>Suppliers &amp; Contractors</option>
-                    <option>Taxes &amp; Duties</option>
-                    <option>Regulatory</option>
-                    <option>Insurance</option>
-                    <option>Fleet &amp; Transport</option>
-                    <option>Property &amp; Leases</option>
-                    <option>Corporate &amp; Other</option>
-                    <option>Supplies &amp; Materials</option>
-                    <option>Capital Projects</option>
-                    <option>Debt Service</option>
-                    <option>Inter-Account Transfers</option>
-                    <option>Bank Charges</option>
-                  </datalist>
+                  <input id="subGroupValue" list="subGroupList" placeholder="Type a group name (suggestions from saved rules)…" autocomplete="off">
+                  <!-- Suggestions populated dynamically from live rules by refreshFormDropdowns() -->
+                  <datalist id="subGroupList"></datalist>
                 </div>
                 <div class="form-field">
                   <label>Notes</label>
@@ -999,7 +978,7 @@
               <tr><td><b>Base Case Row</b></td><td>Assigned by rule</td><td>The cashflow model reporting line (e.g. Fuel, Loan Principal, Supplier/Contractor). Top level in all summaries.</td></tr>
               <tr><td><b>Category</b></td><td>Assigned by rule</td><td>Granular rule label (e.g. JPS FUEL, Capital, Payroll). Adds detail beneath the base case row.</td></tr>
               <tr><td><b>Pay Group</b></td><td><code>pay_group</code> — direct from Oracle AP</td><td>Natural sub-grouping for AP records (FUEL, LOAN, SUPPLIER, EMPLOYEE, TAX, PURCHASE POWER…). Used as the sub-group dimension in the Multi-Month Report. No manual entry needed.</td></tr>
-              <tr><td><b>Main Group</b></td><td>Assigned by rule</td><td>Broadest reporting tier (Inflows, Operating Outflows, Capital Outflows, Financing, Non-Cash / Transfers).</td></tr>
+              <tr><td><b>Main Group</b></td><td>Assigned by rule</td><td>Broadest reporting tier. Values are user-defined on rules — whatever you type becomes available in the dropdown for future rules.</td></tr>
               <tr><td><b>FPC</b></td><td><code>fpc</code> — account segment</td><td>Oracle function/project code. Used by FPC-based rules.</td></tr>
               <tr><td><b>Vendor</b></td><td><code>vendor</code></td><td>Supplier name. Used by vendor_contains rules.</td></tr>
             </tbody>
