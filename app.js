@@ -104,7 +104,7 @@
     const p = String(account || "").split(".");
     return {
       cost_item:    (p[2] || "").replace(/^0+/, "") || "0",  // segment 3
-      bank_account: p[3] || "",                               // segment 4
+      bank_account: p[3] ? p[3].padStart(5, "0") : "",        // segment 4 — always 5 chars
       fpc:          (p[4] || "").replace(/^0+/, "") || ""    // segment 5
     };
   }
