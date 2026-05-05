@@ -269,6 +269,10 @@
       case "cashbook_cost_range":  return inRange(row.cost_item, value);
       case "jobno_range":          return inRange(row.jobno, value);
       case "jobno_equals":         return norm(row.jobno) === match;
+      case "source_contains":      return norm(row.source).includes(match);
+      case "source_equals":        return norm(row.source) === match;
+      case "cb_category_contains": return norm(row.category_code).includes(match);
+      case "cb_category_equals":   return norm(row.category_code) === match;
       case "cc_equals":            return norm(row.cc) === match;
       case "emp_no_equals":        return norm(row.emp_no) === match;
       case "vendor_no_equals":     return norm(row.vendor_no) === match;
@@ -649,7 +653,9 @@
         fpc_equals: "FPC=", fpc_prefix: "FPC^", fpc_range: "FPC∈",
         description_contains: "Desc∋", cashbook_cost_range: "CI∈",
         jobno_range: "Job∈", jobno_equals: "Job=",
-        cc_equals: "CC=", emp_no_equals: "Emp=", vendor_no_equals: "VndNo="
+        cc_equals: "CC=", emp_no_equals: "Emp=", vendor_no_equals: "VndNo=",
+        source_contains: "CBSrc∋", source_equals: "CBSrc=",
+        cb_category_contains: "CBCat∋", cb_category_equals: "CBCat="
       };
       return `${labels[type] || type} ${value}`;
     };
