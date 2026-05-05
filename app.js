@@ -203,54 +203,24 @@
         && matchSingle(rule.cond3_type, rule.cond3_value,  row);
   }
 
-  function baseRowFor(row) {
-    const c = norm(row.cashbook_category); const pg = norm(row.pay_group);
-    if (row.data_source === "Cashbook") {
-      if (row.role !== "Inflow" || c === "TRANSFER" || c === "BANK CHARGE") return "";
-      return row.base_case_row || "Collections";
-    }
-    if (pg.includes("PURCHASE POWER") || c === "IPP" || c === "PURCHASE POWER") return "IPP";
-    if (c === "JPS FUEL" || c === "FUEL") return "Fuel";
-    if (c === "PAYROLL" || pg.includes("EMPLOYEE")) return "Payroll & Related";
-    if (c === "INVENTORY") return "Inventory";
-    if (c === "INSURANCE") return "Insurance";
-    if (c === "LOAN PRINCIPAL") return "Loan Principal";
-    if (c === "LOAN INTEREST" || c === "LOAN FEES") return "Loan Interest & Fees";
-    if (c === "JAMECO") return "Motor Vehicle Transport";
-    if (["LEASE/RENTAL", "CAPITAL", "SUPPLIER", "REGULATORY FEES", "OTHER"].includes(c)) return "Supplier/Contractor";
-    if (c === "TAXES") return "Taxes";
-    if (!c || c === "UNMAPPED") return "";
-    return "Supplier/Contractor";
-  }
-
   function applyMappings(sourceRows, rules) {
     return sourceRows.map((r) => {
       const row = { ...r };
       const rule = rules.find((candidate) => candidate.active !== false && ruleApplies(candidate, row));
       if (rule) {
-        row.cashbook_category = rule.category || "Unmapped";
-        row.base_case_row = rule.base_case_row || baseRowFor(row);
-        row.main_group = rule.main_group || "";
-        row.sub_group  = rule.sub_group  || "";
-        row.mapped = true;
-        row.mapping_rule = rule.rule_code || rule.rule_type;
+        row.cashbook_category = rule.category || "";
+        row.base_case_row     = rule.base_case_row || "";
+        row.main_group        = rule.main_group || "";
+        row.sub_group         = rule.sub_group  || "";
+        row.mapped            = true;
+        row.mapping_rule      = rule.rule_code || rule.rule_type;
       } else {
-        row.cashbook_category = "Unmapped";
-        row.base_case_row = "";
-        row.main_group = "";
-        row.sub_group  = "";
-        row.mapped = false;
-        row.mapping_rule = "Unmapped";
-      }
-      if (!row.base_case_row) row.base_case_row = baseRowFor(row);
-      // Supplier fallback for AP rows that are still unmapped but carry a SUPPLIER paygroup
-      if (row.data_source === "Invoice Payments" && !row.mapped && !/DONATION|SPONSORSHIP|FOUNDATION/i.test(row.description || "") && norm(row.pay_group).includes("SUPPLIER")) {
-        row.cashbook_category = "Supplier";
-        row.base_case_row = "Supplier/Contractor";
-        row.main_group = "Operating Outflows";
-        row.sub_group  = "Suppliers & Contractors";
-        row.mapped = true;
-        row.mapping_rule = "Procedure fallback supplier";
+        row.cashbook_category = "";
+        row.base_case_row     = "";
+        row.main_group        = "";
+        row.sub_group         = "";
+        row.mapped            = false;
+        row.mapping_rule      = "";
       }
       return row;
     });
@@ -647,7 +617,8 @@
     return `RULE-${String(max + 1).padStart(4, "0")}`;
   }
 
-  function currentMonthKey() { return $("monthInput").value || $("monthSelect").value; }
+  // For save/reapply operations — uses the loaded month, NOT the saved-months dropdown
+  function currentMonthKey() { return state.loadedMonth || $("monthInput").value; }
   async function readFile(input) { return input.files[0] ? input.files[0].text() : ""; }
 
   async function ensureSupabase() {
@@ -917,17 +888,6 @@
 
   async function processAndSaveMonth() {
     if (state.busy) return;
-    const monthKey = currentMonthKey();
-    if (!monthKey) return setStatus("Choose a month first.", "error");
-
-    // Block processing if month is approved/locked
-    const existing = state.months.find((m) => m.month_key === monthKey);
-    if (existing && existing.status === "approved") {
-      return setStatus(`${monthKey} is approved and locked. It cannot be overwritten.`, "error");
-    }
-    // Warn before overwriting an existing saved month
-    if (existing && !confirm(`${monthKey} already has saved data (last processed ${fmtDateTime(existing.last_processed_at)}). Overwrite?`)) return;
-
     setBusy(true);
     setStatus("Reading files…", "");
     try {
@@ -936,16 +896,43 @@
         cashbook_description: await readFile($("cashbookDescriptionFile")),
         cashbook_account: await readFile($("cashbookAccountFile"))
       };
+      if (!uploads.ap && !uploads.cashbook_description && !uploads.cashbook_account) {
+        return setStatus("Upload at least one source file before processing.", "error");
+      }
       const mappingCsv = await readFile($("mappingFile"));
       if (mappingCsv) { setStatus("Importing rules from CSV…", ""); await importRulesFromCsv(mappingCsv); }
       setStatus("Parsing AP report and cashbook files…", "");
       const cashbookRows = mergeCashbooks(uploads.cashbook_description, uploads.cashbook_account);
       const apRows = parseAp(uploads.ap, "invoice_payments.txt");
       const sourceRows = [...cashbookRows, ...apRows];
-      setStatus(`Parsed ${sourceRows.toLocaleString ? sourceRows.length.toLocaleString() : sourceRows.length} records (${apRows.length.toLocaleString()} AP + ${cashbookRows.length.toLocaleString()} cashbook). Applying rules…`, "");
+      if (!sourceRows.length) return setStatus("No records parsed — check your source files.", "error");
+      setStatus(`Parsed ${sourceRows.length.toLocaleString()} records (${apRows.length.toLocaleString()} AP + ${cashbookRows.length.toLocaleString()} cashbook). Applying rules…`, "");
       const processed = applyMappings(sourceRows, state.rules);
       const unmapped = processed.filter((r) => !r.mapped).length;
-      setStatus(`Mapped ${processed.length.toLocaleString()} records — ${unmapped} unmapped. Saving to database…`, "");
+
+      // Ask what month this is for — after parsing so the user can see the record count
+      let monthKey = $("monthInput").value;
+      if (!monthKey) {
+        setBusy(false); // allow prompt interaction
+        monthKey = prompt(`Parsed ${processed.length.toLocaleString()} records — ${unmapped} unmapped.\n\nWhat month is this for? (YYYY-MM)`);
+        setBusy(true);
+      }
+      if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey.trim())) {
+        return setStatus("Save cancelled — enter a valid month in YYYY-MM format.", "error");
+      }
+      monthKey = monthKey.trim();
+      $("monthInput").value = monthKey;
+
+      // Block if approved/locked
+      const existing = state.months.find((m) => m.month_key === monthKey);
+      if (existing && existing.status === "approved") {
+        return setStatus(`${monthKey} is approved and locked. It cannot be overwritten.`, "error");
+      }
+      if (existing && !confirm(`${monthKey} already has saved data (last processed ${fmtDateTime(existing.last_processed_at)}). Overwrite?`)) {
+        return setStatus("Overwrite cancelled.", "");
+      }
+
+      setStatus(`Saving ${processed.length.toLocaleString()} records for ${monthKey}…`, "");
       state.records = processed;
       state.uploads = uploads;
       await saveMonthToDb(monthKey, uploads, processed);
