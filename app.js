@@ -56,9 +56,10 @@
 
   const state = {
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
-    loadedMonth: null, loadedAt: null, loadedBy: null, busy: false,
+    loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, settings: {},
-    pendingApprovalMonth: null   // month key waiting for OTP entry
+    pendingApprovalMonth: null,   // month key waiting for OTP entry
+    apDetailLoaded: false         // true when AP detail columns merged into state.records
   };
 
   // Returns the name typed in the header field, falling back to "Anonymous"
@@ -456,7 +457,14 @@
   function renderDataTab(name) {
     if (name === "outflows") { renderOutflows(); pendingRender.delete("outflows"); }
     else if (name === "base")  { renderBase();     pendingRender.delete("base"); }
-    else if (name === "exceptions") { renderExceptions(); pendingRender.delete("exceptions"); }
+    else if (name === "exceptions") {
+      renderExceptions();
+      pendingRender.delete("exceptions");
+      // Lazy-load AP detail columns if not yet available (DB load path)
+      if (!state.apDetailLoaded && state.loadedMonthId) {
+        loadApDetail().then(() => renderExceptions());
+      }
+    }
   }
   function renderAll() {
     renderMonthBar();
@@ -740,8 +748,10 @@
     }
     await auditLog("process_month", monthKey, "", `Saved ${records.length} processed records`);
     state.loadedMonth = monthKey;
+    state.loadedMonthId = monthId;
     state.loadedAt = upsertMonth.data.last_processed_at || timestamp();
     state.loadedBy = userName();
+    state.apDetailLoaded = true;  // records came from parser — all fields already in memory
   }
 
   async function processAndSaveMonth() {
@@ -790,8 +800,10 @@
     }
   }
 
-  // Columns needed for rendering, mapping, and export — excludes raw_json (was 13 MB / month).
-  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule,cc,jobno,invoice_no,invoice_date,vendor_no,emp_no,acct_date,amount_original,voucher_number,po_no,operating_unit,bank_account,check_no,check_date,amount_paid,void_flag,currency,line_no";
+  // Slim column set for fast initial load — used for all calculations and rendering.
+  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule";
+  // AP detail columns — fetched lazily only when the Exceptions tab is opened.
+  const AP_DETAIL_COLS = "record_key,cc,jobno,invoice_no,invoice_date,vendor_no,emp_no,acct_date,amount_original,voucher_number,po_no,operating_unit,bank_account,check_no,check_date,amount_paid,void_flag,currency,line_no";
 
   async function fetchAllRecords(monthId) {
     // PostgREST default row cap is 1 000. Paginate to get every record.
@@ -811,6 +823,40 @@
       page++;
     }
     return all;
+  }
+
+  // Lazy-loads the 17 AP detail columns for Invoice Payments records only.
+  // Called when the Exceptions tab is first opened after a DB load.
+  async function loadApDetail() {
+    if (state.apDetailLoaded || !state.loadedMonthId) return;
+    const apCount = state.records.filter((r) => r.data_source === "Invoice Payments").length;
+    if (!apCount) { state.apDetailLoaded = true; return; }
+    setStatus("Loading AP detail columns…", "");
+    try {
+      const PAGE = 1000;
+      let all = [], page = 0;
+      while (true) {
+        const { data, error } = await state.supabase
+          .from("cashflow_records")
+          .select(AP_DETAIL_COLS)
+          .eq("month_id", state.loadedMonthId)
+          .eq("data_source", "Invoice Payments")
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+      const detailMap = new Map(all.map((r) => [r.record_key, r]));
+      state.records = state.records.map((r) => {
+        const d = detailMap.get(r.record_key);
+        return d ? { ...r, ...d } : r;
+      });
+      state.apDetailLoaded = true;
+      setStatus(`Loaded AP detail for ${all.length} records`, "ok");
+    } catch (err) {
+      setStatus("AP detail load failed: " + err.message, "error");
+    }
   }
 
   async function loadMonth() {
@@ -835,8 +881,10 @@
       state.records = records;
       state.uploads = Object.fromEntries((uploads || []).map((u) => [u.source_type, u.content_text]));
       state.loadedMonth = monthKey;
+      state.loadedMonthId = month.id;
       state.loadedAt = month.last_processed_at;
       state.loadedBy = month.processed_by || null;
+      state.apDetailLoaded = false;   // reset so Exceptions tab will lazy-load detail
       $("monthInput").value = monthKey;
       renderAll();
       setStatus(`Loaded ${monthKey} — ${records.length} records`, "ok");
