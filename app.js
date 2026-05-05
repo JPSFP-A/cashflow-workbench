@@ -29,7 +29,7 @@
 
   function setBusy(busy) {
     state.busy = busy;
-    ["processBtn", "loadMonthBtn", "reapplyBtn", "resetBtn", "saveRuleBtn"].forEach((id) => {
+    ["processBtn", "reapplyBtn", "resetBtn", "saveRuleBtn"].forEach((id) => {
       const el = $(id);
       if (el) el.disabled = busy;
     });
@@ -687,10 +687,19 @@
       .order("month_key", { ascending: false });
     if (error) return setStatus(error.message, "error");
     state.months = data || [];
-    $("monthSelect").innerHTML = `<option value="">Select saved month</option>${state.months.map((m) => {
+    $("monthSelect").innerHTML = `<option value="">— choose saved month —</option>${state.months.map((m) => {
       const lock = m.status === "approved" ? " 🔒" : "";
       return `<option value="${esc(m.month_key)}">${esc(m.month_key)}${lock}${m.last_processed_at ? " (" + fmtDateTime(m.last_processed_at) + ")" : ""}</option>`;
     }).join("")}`;
+    // Auto-load most recent month on first startup (no month loaded yet)
+    if (!state.loadedMonth && state.months.length) {
+      const recent = state.months[0];
+      $("monthSelect").value = recent.month_key;
+      const hint = $("autoLoadHint");
+      if (hint) hint.textContent = `Auto-loading ${recent.month_key}…`;
+      await loadMonth();
+      if (hint) hint.textContent = "";
+    }
     renderMultiMonthSelector();
   }
 
@@ -1602,7 +1611,7 @@
     $("monthInput").value = new Date().toISOString().slice(0, 7);
     bindTabs();
     $("processBtn").addEventListener("click", processAndSaveMonth);
-    $("loadMonthBtn").addEventListener("click", loadMonth);
+    $("monthSelect").addEventListener("change", async () => { if ($("monthSelect").value) await loadMonth(); });
     $("reapplyBtn").addEventListener("click", reapplySavedRules);
     $("resetBtn").addEventListener("click", resetMonth);
     $("saveRuleBtn").addEventListener("click", saveRule);

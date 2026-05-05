@@ -632,13 +632,19 @@
             </div>
           </div>
           <div class="workspace-card-body">
-            <div class="month-selectors">
-              <label>Month <input id="monthInput" type="month" style="width:160px"></label>
-              <label>Saved months <select id="monthSelect" style="min-width:240px"></select></label>
-              <button class="btn btn-primary" id="processBtn">▶ Process &amp; Save</button>
-              <button class="btn btn-ghost" id="loadMonthBtn">↩ Load Month</button>
+            <!-- Row 1: saved months — auto-loads on selection -->
+            <div class="month-selectors" style="border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px">
+              <label style="font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em">Saved month</label>
+              <select id="monthSelect" style="min-width:260px"></select>
               <button class="btn btn-ghost" id="reapplyBtn">↻ Reapply Rules</button>
               <button class="btn btn-danger" id="resetBtn">✕ Reset Month</button>
+              <span class="hint" id="autoLoadHint" style="font-style:italic"></span>
+            </div>
+            <!-- Row 2: process a new month -->
+            <div class="month-selectors" style="margin-bottom:12px">
+              <label style="font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em">New month</label>
+              <label><input id="monthInput" type="month" style="width:160px"></label>
+              <button class="btn btn-primary" id="processBtn">▶ Process &amp; Save</button>
             </div>
             <div class="file-grid">
               <div class="file-slot">
@@ -658,7 +664,7 @@
                 <input id="mappingFile" type="file" accept=".csv">
               </div>
             </div>
-            <p class="hint">Source files are stored in Supabase so the month can be reprocessed at any time. Reset wipes all records and uploads for the selected month.</p>
+            <p class="hint">Upload files above then click <b>Process &amp; Save</b> for a new month. Source files are stored so any month can be reprocessed without re-uploading.</p>
           </div>
         </div>
       </div>
@@ -973,9 +979,8 @@
           <h2>Recommended Workflow</h2>
           <ol>
             <li>Enter your name on the welcome screen — it is recorded on every action in the audit log. Click your name badge in the header to change it.</li>
-            <li>Select a month in the Month field, or pick a saved month from the dropdown and click <b>↩ Load Month</b>.</li>
-            <li>Upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats). The optional Rules Import CSV lets you bulk-load rules from a spreadsheet.</li>
-            <li>Click <b>▶ Process &amp; Save Month</b>. The status bar shows each stage: parsing → rule application → record count → save progress. Raw source text and processed records are stored in Supabase.</li>
+            <li>On startup the app <b>automatically loads the most recent saved month</b> — no click needed. To switch months, pick a different entry from the <b>Saved month</b> dropdown; it loads immediately on selection.</li>
+            <li>To process a <b>new</b> month: pick the month in the <b>New month</b> date field, upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats), then click <b>▶ Process &amp; Save</b>. The status bar shows each stage: parsing → rule application → record count → save progress. Raw source text and processed records are stored in Supabase.</li>
             <li>The <b>Outflow Validation</b> tab opens first. Review AP outflows by base case row and by category, and the cashbook summary side-by-side.</li>
             <li>Switch to <b>Map Exceptions</b> to see unmapped lines or lines with no base case row. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b> to rebuild immediately.</li>
             <li>Use <b>↻ Reapply Rules</b> from the month panel at any time to re-run all rules against the saved source files without re-uploading.</li>
