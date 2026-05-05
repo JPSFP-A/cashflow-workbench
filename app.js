@@ -561,19 +561,13 @@
   // Rebuild base-row dropdown from live rule data
   function refreshFormDropdowns() {
     const rows = liveBaseRows();
-    const baseRowSel = $("baseRowValue");
-    if (baseRowSel) {
-      const cur = baseRowSel.value;
-      baseRowSel.innerHTML = `<option value="">Leave unassigned</option>${rows.map((r) => `<option>${esc(r)}</option>`).join("")}`;
-      baseRowSel.value = cur;
-    }
-    // Also refresh the admin sub-group lookup base-row select
-    const sgBaseRowSel = $("sgBaseRow");
-    if (sgBaseRowSel) {
-      const cur = sgBaseRowSel.value;
-      sgBaseRowSel.innerHTML = `<option value="">— Select base row —</option>${rows.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("")}`;
-      if (cur) sgBaseRowSel.value = cur;
-    }
+    const opts = rows.map((r) => `<option value="${esc(r)}">`).join("");
+    // Rule form base-row datalist
+    const baseRowList = $("baseRowList");
+    if (baseRowList) baseRowList.innerHTML = opts;
+    // Admin sub-group lookup base-row datalist
+    const sgBaseRowList = $("sgBaseRowList");
+    if (sgBaseRowList) sgBaseRowList.innerHTML = opts;
     filterSubGroupByBaseRow();
   }
 

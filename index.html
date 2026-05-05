@@ -800,7 +800,8 @@
                 </div>
                 <div class="form-field">
                   <label>Base Case row</label>
-                  <select id="baseRowValue"></select>
+                  <input id="baseRowValue" list="baseRowList" placeholder="Select or type a new base row…" autocomplete="off">
+                  <datalist id="baseRowList"></datalist>
                 </div>
                 <div class="form-field">
                   <label>Applies to</label>
@@ -918,9 +919,8 @@
           <div style="display:flex;gap:8px;align-items:flex-end;padding:0 16px 12px;flex-wrap:wrap">
             <div class="form-field" style="margin:0;min-width:200px">
               <label style="font-size:12px;font-weight:600">Base Row</label>
-              <select id="sgBaseRow" style="height:32px;font-size:13px">
-                <option value="">— Select base row —</option>
-              </select>
+              <input id="sgBaseRow" list="sgBaseRowList" placeholder="Select or type new…" autocomplete="off" style="height:32px;font-size:13px">
+              <datalist id="sgBaseRowList"></datalist>
             </div>
             <div class="form-field" style="margin:0;min-width:160px">
               <label style="font-size:12px;font-weight:600">Sub Group</label>
