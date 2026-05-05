@@ -712,9 +712,15 @@
                 <button class="btn btn-ghost btn-sm" id="promptDismissBtn">Dismiss</button>
               </div>
               <div class="form-stack">
-                <div class="form-field">
-                  <label>Rule code</label>
-                  <input id="ruleCodeValue" placeholder="Auto-generated for new rules">
+                <div style="display:flex;gap:12px">
+                  <div class="form-field" style="flex:1">
+                    <label>Rule code</label>
+                    <input id="ruleCodeValue" placeholder="Auto-generated for new rules">
+                  </div>
+                  <div class="form-field" style="flex:0 0 110px">
+                    <label>Priority <span class="hint" style="font-weight:400">(lower runs first)</span></label>
+                    <input id="sortOrderValue" type="number" min="1" placeholder="auto">
+                  </div>
                 </div>
                 <div class="form-field">
                   <label>Condition 1 — type</label>

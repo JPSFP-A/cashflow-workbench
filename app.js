@@ -94,7 +94,7 @@
   }
 
   function table(id, heads, rows) {
-    $(id).innerHTML = `<thead><tr>${heads.map((h) => `<th>${esc(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${heads.map((h) => `<td class="${h.num ? "num" : ""}">${h.render ? h.render(r) : esc(r[h.key])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    $(id).innerHTML = `<thead><tr>${heads.map((h) => `<th>${esc(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr>${heads.map((h) => `<td class="${h.num ? "num" : ""}">${h.render ? h.render(r, i) : esc(r[h.key])}</td>`).join("")}</tr>`).join("")}</tbody>`;
   }
 
   function download(name, content, type) {
@@ -581,7 +581,7 @@
       : state.rules;
     const rulesCount = $("rulesCount");
     if (rulesCount) rulesCount.textContent = q ? `${filtered.length} of ${state.rules.length} rules` : `${state.rules.length} rules`;
-    // Build a readable "Conditions" summary cell
+    // Readable condition summary
     const condLabel = (type, value) => {
       if (!type || !value) return "";
       const labels = {
@@ -593,7 +593,17 @@
       };
       return `${labels[type] || type} ${value}`;
     };
+    // Up/down only meaningful when not filtered (order would be confusing)
+    const canMove = !q;
     table("rulesTable", [
+      { label: "Order", key: "sort_order", render: (r, i) => {
+          const up   = canMove && i > 0
+            ? `<button title="Move up"   onclick="window.cashflowApp.moveRule('${esc(r.rule_code)}','up')"   style="padding:1px 6px;font-size:11px">▲</button>` : "";
+          const down = canMove && i < filtered.length - 1
+            ? `<button title="Move down" onclick="window.cashflowApp.moveRule('${esc(r.rule_code)}','down')" style="padding:1px 6px;font-size:11px">▼</button>` : "";
+          return `<span style="display:inline-flex;gap:3px;align-items:center">${up}${down}<span style="min-width:28px;text-align:right;color:var(--muted);font-size:11px">${r.sort_order ?? ""}</span></span>`;
+        }
+      },
       { label: "Edit",       key: "rule_code",   render: (r) => `<button onclick="window.cashflowApp.loadRule('${esc(r.rule_code)}')">Edit</button>` },
       { label: "Code",       key: "rule_code" },
       { label: "Main Group", key: "main_group" },
@@ -614,6 +624,31 @@
       { label: "Notes",      key: "notes" },
       { label: "Delete",     key: "rule_code",   render: (r) => `<button class="danger" onclick="window.cashflowApp.deleteRule('${esc(r.rule_code)}')">Delete</button>` }
     ], filtered);
+  }
+
+  async function moveRule(ruleCode, dir) {
+    // Rules are already sorted by sort_order in state.rules
+    const idx = state.rules.findIndex((r) => r.rule_code === ruleCode);
+    if (idx < 0) return;
+    const swapIdx = dir === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= state.rules.length) return;
+
+    const ruleA = state.rules[idx];
+    const ruleB = state.rules[swapIdx];
+    // Swap their sort_order values (use positional fallback if null)
+    const orderA = ruleA.sort_order ?? idx + 1;
+    const orderB = ruleB.sort_order ?? swapIdx + 1;
+
+    // If both have the same sort_order, nudge one apart first
+    const newA = orderB;
+    const newB = orderA === orderB ? orderB + (dir === "up" ? 1 : -1) : orderA;
+
+    const [resA, resB] = await Promise.all([
+      state.supabase.from("cashflow_rules").update({ sort_order: newA }).eq("rule_code", ruleA.rule_code),
+      state.supabase.from("cashflow_rules").update({ sort_order: newB }).eq("rule_code", ruleB.rule_code)
+    ]);
+    if (resA.error || resB.error) return setStatus((resA.error || resB.error).message, "error");
+    await loadRules(false);
   }
 
   function renderAudit() {
@@ -690,7 +725,7 @@
   }
 
   async function loadRules(syncDefaults = true) {
-    const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("rule_code");
+    const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("rule_code");
     if (error) return setStatus(error.message, "error");
 
     if (syncDefaults) {
@@ -1189,10 +1224,11 @@
     $("notesValue").value = rule.notes || "";
     if ($("mainGroupValue")) $("mainGroupValue").value = rule.main_group || "";
     if ($("subGroupValue"))  $("subGroupValue").value  = rule.sub_group  || "";
-    if ($("cond2Type"))  $("cond2Type").value  = rule.cond2_type  || "";
-    if ($("cond2Value")) $("cond2Value").value = rule.cond2_value || "";
-    if ($("cond3Type"))  $("cond3Type").value  = rule.cond3_type  || "";
-    if ($("cond3Value")) $("cond3Value").value = rule.cond3_value || "";
+    if ($("cond2Type"))      $("cond2Type").value      = rule.cond2_type  || "";
+    if ($("cond2Value"))     $("cond2Value").value     = rule.cond2_value || "";
+    if ($("cond3Type"))      $("cond3Type").value      = rule.cond3_type  || "";
+    if ($("cond3Value"))     $("cond3Value").value     = rule.cond3_value || "";
+    if ($("sortOrderValue")) $("sortOrderValue").value = rule.sort_order  != null ? rule.sort_order : "";
     const subGroupRow = $("subGroupRow");
     if (subGroupRow) subGroupRow.style.display = rule.applies_to === "ap" ? "none" : "";
     document.querySelector('.tab-btn[data-tab="exceptions"]').click();
@@ -1201,7 +1237,7 @@
 
   function clearRule() {
     ["ruleCodeValue", "matchValue", "categoryValue", "notesValue", "subGroupValue",
-     "cond2Value", "cond3Value"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
+     "cond2Value", "cond3Value", "sortOrderValue"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
     if ($("mainGroupValue")) $("mainGroupValue").value = "";
     if ($("cond2Type"))  $("cond2Type").value  = "";
     if ($("cond3Type"))  $("cond3Type").value  = "";
@@ -1230,10 +1266,16 @@
       notes:       $("notesValue").value.trim(),
       main_group:  ($("mainGroupValue") ? $("mainGroupValue").value.trim() : ""),
       sub_group:   ($("subGroupValue")  ? $("subGroupValue").value.trim()  : ""),
+      sort_order:  $("sortOrderValue") ? (parseInt($("sortOrderValue").value, 10) || null) : null,
       active: true,
       created_by: userName(),
       updated_by: userName()
     };
+    // New rule: default sort_order to end of list (max + 1)
+    if (!code && rule.sort_order == null) {
+      const maxOrder = state.rules.reduce((m, r) => Math.max(m, r.sort_order ?? 0), 0);
+      rule.sort_order = maxOrder + 1;
+    }
     if (!rule.match_value || !rule.category) return setStatus("Match value and category are required.", "error");
 
     // Duplicate check — warn if another active rule has the same type + match + scope
@@ -1648,7 +1690,7 @@
 
     // Dirty indicator — show "Unsaved changes" when the rule form is modified
     const ruleDirtyHint = $("ruleDirtyHint");
-    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","cond2Type","cond2Value","cond3Type","cond3Value","categoryValue","baseRowValue","appliesTo","notesValue","mainGroupValue","subGroupValue"];
+    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","cond2Type","cond2Value","cond3Type","cond3Value","categoryValue","baseRowValue","appliesTo","notesValue","mainGroupValue","subGroupValue","sortOrderValue"];
     const markDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = ""; };
     const clearDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = "none"; };
     ruleFormFields.forEach((id) => {
@@ -1720,5 +1762,5 @@
   bindUi();
   init();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule };
 })();
