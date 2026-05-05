@@ -464,14 +464,16 @@
       .slice(0, 1000);
 
     table("baseDetailTable", [
-      { label: "Source",      key: "data_source" },
-      { label: "Vendor",      key: "vendor" },
-      { label: "Pay Group",   key: "pay_group" },
-      { label: "FPC",         key: "fpc" },
-      { label: "Category",    key: "cashbook_category" },
-      { label: "Description", key: "description" },
-      { label: "Amount",      key: "amount", num: true, render: (r) => money(r.amount) },
-      { label: "Rule",        key: "mapping_rule" }
+      { label: "Source",        key: "data_source" },
+      { label: "CB Source",     key: "source",          render: (r) => r.source ? esc(r.source) : "" },
+      { label: "CB Category",   key: "category_code",   render: (r) => r.category_code ? esc(r.category_code) : "" },
+      { label: "Vendor",        key: "vendor" },
+      { label: "Pay Group",     key: "pay_group" },
+      { label: "FPC",           key: "fpc" },
+      { label: "Mapped Cat",    key: "cashbook_category" },
+      { label: "Description",   key: "description" },
+      { label: "Amount",        key: "amount", num: true, render: (r) => money(r.amount) },
+      { label: "Rule",          key: "mapping_rule" }
     ], rows);
   }
 
@@ -529,6 +531,8 @@
       { label: "Map",        key: "record_key", render: (r) => `<button onclick="window.cashflowApp.prefillRule('${esc(r.record_key)}')">Map</button>` },
       { label: "Issue",      key: "record_key", render: (r) => { const t = excType(r); return t === "unmapped" ? '<span class="exc-badge unmapped">Unmapped</span>' : '<span class="exc-badge norow">No base row</span>'; } },
       { label: "Source",     key: "data_source" },
+      { label: "CB Source",  key: "source",        render: (r) => r.source ? esc(r.source) : "" },
+      { label: "CB Category",key: "category_code", render: (r) => r.category_code ? esc(r.category_code) : "" },
       { label: "Category",   key: "cashbook_category" },
       { label: "Base Row",   key: "base_case_row", render: (r) => r.base_case_row ? esc(r.base_case_row) : '<span class="bad">—</span>' },
       { label: "Vendor",     key: "vendor" },
