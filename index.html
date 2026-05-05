@@ -1027,45 +1027,8 @@
           </ul>
           <p class="hint">Rule order matters — first match wins. More specific multi-condition rules must appear above broad single-condition fallbacks (e.g. RULE-0023 Supplier catch-all).</p>
 
-          <h2>AP Rules — 47 rules (updated 27 Apr 2026)</h2>
-          <p>Rules run top-to-bottom; first match wins. More specific rules must appear before broad pay group fallbacks.</p>
-          <ul>
-            <li><b>IPP:</b> Pay group contains "PURCHASE POWER"</li>
-            <li><b>Capital:</b> FPC 18601 or 30000–39999, Supplier pay group</li>
-            <li><b>Inventory:</b> FPC 15401–15499, Supplier pay group</li>
-            <li><b>Insurance:</b> FPC 16501</li>
-            <li><b>Jameco (Motor Vehicle Transport):</b> Vendor contains "JAMECO"</li>
-            <li><b>Regulatory Fees:</b> Vendor "OFFICE OF UTILITIES" or pay group "REGULATORY FEES"</li>
-            <li><b>Loan Principal:</b> FPC prefix 22xxx, Loan pay group</li>
-            <li><b>Loan Interest:</b> FPC prefix 23xxx, Loan pay group</li>
-            <li><b>Loan Fees:</b> FPC prefix 42xxx, Loan pay group</li>
-            <li><b>JPS Fuel:</b> FPC 143xx, 23237, 23258, 23272, Fuel pay group</li>
-            <li><b>Lease/Rental:</b> Description contains "PROPERTY RENTAL" or "HEAD OFFICE"</li>
-            <li><b>Other:</b> Description contains "DONATION", "SPONSORSHIP", or "FOUNDATION"</li>
-            <li><b>Payroll:</b> Pay group contains "EMPLOYEE"</li>
-            <li><b>Taxes:</b> Pay group contains "TAX"</li>
-            <li><b>Supplier (default):</b> Pay group contains "SUPPLIER"</li>
-          </ul>
-
-          <h2>Cashbook Rules — (updated 27 Apr 2026)</h2>
-          <ul>
-            <li><b>CI 1–99:</b> Payroll → Collections</li>
-            <li><b>CI 321–322:</b> F/X Gain/(Loss) → Collections</li>
-            <li><b>CI 352, 912:</b> Interest Income → Collections</li>
-            <li><b>CI 380, 395:</b> Bank Charge (credit side — excluded from Base Case)</li>
-            <li><b>JE27:</b> Cash Book → Collections</li>
-            <li><b>JE 09MA, JE 09TA, JE 26B:</b> Transfer — excluded from Base Case</li>
-            <li><b>FERC 12806, 42101:</b> Dividend Received</li>
-            <li><b>CI 13101:</b> Sinking Fund → Long-term Debt Financing</li>
-            <li><b>CI 13102:</b> Payroll → Collections</li>
-            <li><b>CI 13104, 13111, 13129, 13149:</b> Transfer — excluded from Base Case</li>
-            <li><b>CI 13118:</b> Supplier → Collections</li>
-            <li><b>CI 13119:</b> RBTT Cheques → Collections</li>
-            <li><b>CI 13123:</b> Citibank Cheques → Collections</li>
-            <li><b>CI 13126:</b> BNS F/X Cheques → Collections</li>
-            <li><b>CI 13175:</b> Expense Cheques → Collections</li>
-            <li><b>F/X Purchase (description):</b> F/X Purchase → Collections</li>
-          </ul>
+          <h2>Rules</h2>
+          <p>All rules are managed in the <b>⚙ Rules</b> tab. Rules run in priority order (lowest number first); first match wins. Use the ▲/▼ buttons to reorder. Specific multi-condition rules must sit above broad catch-alls.</p>
           <p class="hint">Run <b>↻ Reapply Rules</b> on each saved month after adding or changing rules to apply changes to historical data.</p>
 
           <h2>Notes</h2>

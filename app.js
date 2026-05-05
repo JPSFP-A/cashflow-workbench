@@ -2,57 +2,6 @@
   const fmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const baseRows = ["Collections", "Long-term Debt Financing", "Insurance Proceeds-Melissa", "Other receipts (GCT Reimbursement)", "Dividend Received", "Fuel", "IPP", "Payroll & Related", "Supplier/Contractor", "Motor Vehicle Transport", "Customs", "Taxes", "Inventory", "Insurance", "Equity Investment", "Loan Principal", "Loan Interest & Fees", "Hurricane Melissa Restoration", "Phase 2 Restoration", "T&D Rebuild", "Dividends Paid"];
 
-  // Rule order matters — first match wins. More specific rules must come before broad paygroup fallbacks.
-  const defaultRules = [
-    { rule_code: "RULE-0001", rule_type: "paygroup_contains", match_value: "PURCHASE POWER", category: "IPP", base_case_row: "IPP", applies_to: "ap", paygroup_filter: "", notes: "Procedure: purchase power payments", active: true, main_group: "Operating Outflows", sub_group: "Energy & Power" },
-    { rule_code: "RULE-0002", rule_type: "fpc_range", match_value: "18601-18601", category: "Capital", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "SUPPLIER", notes: "Procedure: supplier capital 18601", active: true, main_group: "Capital Outflows", sub_group: "Capital Projects" },
-    { rule_code: "RULE-0003", rule_type: "fpc_range", match_value: "30000-39999", category: "Capital", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "SUPPLIER", notes: "Procedure: supplier capital 30000-39999", active: true, main_group: "Capital Outflows", sub_group: "Capital Projects" },
-    { rule_code: "RULE-0004", rule_type: "fpc_range", match_value: "15401-15499", category: "Inventory", base_case_row: "Inventory", applies_to: "ap", paygroup_filter: "SUPPLIER", notes: "Procedure: supplier inventory 15401-15499", active: true, main_group: "Operating Outflows", sub_group: "Supplies & Materials" },
-    { rule_code: "RULE-0005", rule_type: "fpc_equals", match_value: "16501", category: "Insurance", base_case_row: "Insurance", applies_to: "ap", paygroup_filter: "", notes: "Procedure: insurance FPC 16501", active: true, main_group: "Operating Outflows", sub_group: "Insurance" },
-    { rule_code: "RULE-0006", rule_type: "vendor_contains", match_value: "JAMECO", category: "Jameco", base_case_row: "Motor Vehicle Transport", applies_to: "ap", paygroup_filter: "", notes: "Procedure: Jameco vehicle lease", active: true, main_group: "Operating Outflows", sub_group: "Fleet & Transport" },
-    { rule_code: "RULE-0007", rule_type: "vendor_contains", match_value: "OFFICE OF UTILITIES", category: "REGULATORY FEES", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: Office of Utilities regulatory fees", active: true, main_group: "Operating Outflows", sub_group: "Regulatory" },
-    { rule_code: "RULE-0008", rule_type: "fpc_prefix", match_value: "22", category: "Loan Principal", base_case_row: "Loan Principal", applies_to: "ap", paygroup_filter: "LOAN", notes: "Procedure: loan principal FPC 22xxx", active: true, main_group: "Financing", sub_group: "Debt Service" },
-    { rule_code: "RULE-0009", rule_type: "fpc_prefix", match_value: "23", category: "Loan Interest", base_case_row: "Loan Interest & Fees", applies_to: "ap", paygroup_filter: "LOAN", notes: "Procedure: loan interest FPC 23xxx", active: true, main_group: "Financing", sub_group: "Debt Service" },
-    { rule_code: "RULE-0010", rule_type: "fpc_prefix", match_value: "42", category: "Loan Fees", base_case_row: "Loan Interest & Fees", applies_to: "ap", paygroup_filter: "LOAN", notes: "Procedure: loan fees FPC 42xxx", active: true, main_group: "Financing", sub_group: "Debt Service" },
-    { rule_code: "RULE-0011", rule_type: "fpc_prefix", match_value: "143", category: "JPS FUEL", base_case_row: "Fuel", applies_to: "ap", paygroup_filter: "FUEL", notes: "Procedure: fuel FPC 143xx", active: true, main_group: "Operating Outflows", sub_group: "Energy & Power" },
-    { rule_code: "RULE-0012", rule_type: "fpc_equals", match_value: "23237", category: "JPS FUEL", base_case_row: "Fuel", applies_to: "ap", paygroup_filter: "FUEL", notes: "Procedure: fuel FPC 23237", active: true, main_group: "Operating Outflows", sub_group: "Energy & Power" },
-    { rule_code: "RULE-0013", rule_type: "fpc_equals", match_value: "23258", category: "JPS FUEL", base_case_row: "Fuel", applies_to: "ap", paygroup_filter: "FUEL", notes: "Procedure: fuel FPC 23258", active: true, main_group: "Operating Outflows", sub_group: "Energy & Power" },
-    { rule_code: "RULE-0014", rule_type: "fpc_equals", match_value: "23272", category: "JPS FUEL", base_case_row: "Fuel", applies_to: "ap", paygroup_filter: "FUEL", notes: "Procedure: fuel FPC 23272", active: true, main_group: "Operating Outflows", sub_group: "Energy & Power" },
-    { rule_code: "RULE-0015", rule_type: "description_contains", match_value: "PROPERTY RENTAL", category: "Lease/Rental", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: property rental", active: true, main_group: "Operating Outflows", sub_group: "Property & Leases" },
-    { rule_code: "RULE-0016", rule_type: "description_contains", match_value: "HEAD OFFICE", category: "Lease/Rental", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: head office property rental", active: true, main_group: "Operating Outflows", sub_group: "Property & Leases" },
-    { rule_code: "RULE-0017", rule_type: "description_contains", match_value: "DONATION", category: "Other", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: other — donations", active: true, main_group: "Operating Outflows", sub_group: "Corporate & Other" },
-    { rule_code: "RULE-0018", rule_type: "description_contains", match_value: "SPONSORSHIP", category: "Other", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: other — sponsorships", active: true, main_group: "Operating Outflows", sub_group: "Corporate & Other" },
-    { rule_code: "RULE-0019", rule_type: "description_contains", match_value: "FOUNDATION", category: "Other", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: other — foundation items", active: true, main_group: "Operating Outflows", sub_group: "Corporate & Other" },
-    { rule_code: "RULE-0020", rule_type: "paygroup_contains", match_value: "REGULATORY FEES", category: "REGULATORY FEES", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: regulatory fees pay group", active: true, main_group: "Operating Outflows", sub_group: "Regulatory" },
-    { rule_code: "RULE-0021", rule_type: "paygroup_contains", match_value: "EMPLOYEE", category: "Payroll", base_case_row: "Payroll & Related", applies_to: "ap", paygroup_filter: "", notes: "Procedure: employee/payroll AP pay group", active: true, main_group: "Operating Outflows", sub_group: "Personnel" },
-    { rule_code: "RULE-0022", rule_type: "paygroup_contains", match_value: "TAX", category: "Taxes", base_case_row: "Taxes", applies_to: "ap", paygroup_filter: "", notes: "Procedure: taxes pay group", active: true, main_group: "Operating Outflows", sub_group: "Taxes & Duties" },
-    { rule_code: "RULE-0023", rule_type: "paygroup_contains", match_value: "SUPPLIER", category: "Supplier", base_case_row: "Supplier/Contractor", applies_to: "ap", paygroup_filter: "", notes: "Procedure: default supplier handling", active: true, main_group: "Operating Outflows", sub_group: "Suppliers & Contractors" },
-    { rule_code: "RULE-0024", rule_type: "cashbook_cost_range", match_value: "1-99", category: "Payroll", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: cashbook CI 1-99 payroll", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0025", rule_type: "cashbook_cost_range", match_value: "321-322", category: "F/X Gain/(Loss)", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: cashbook CI 321-322 F/X", active: true, main_group: "Inflows", sub_group: "Treasury & F/X" },
-    { rule_code: "RULE-0026", rule_type: "cashbook_cost_range", match_value: "352-352", category: "Interest Income", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: cashbook CI 352 interest income", active: true, main_group: "Inflows", sub_group: "Investment Income" },
-    { rule_code: "RULE-0027", rule_type: "cashbook_cost_range", match_value: "380-380", category: "Bank Charge", base_case_row: "", applies_to: "cashbook_credit", paygroup_filter: "", notes: "Procedure: cashbook CI 380 bank charge (credit side, excluded from base case)", active: true, main_group: "Non-Cash / Transfers", sub_group: "Bank Charges" },
-    { rule_code: "RULE-0028", rule_type: "cashbook_cost_range", match_value: "395-395", category: "Bank Charge", base_case_row: "", applies_to: "cashbook_credit", paygroup_filter: "", notes: "Procedure: cashbook CI 395 bank charge (credit side, excluded from base case)", active: true, main_group: "Non-Cash / Transfers", sub_group: "Bank Charges" },
-    { rule_code: "RULE-0029", rule_type: "cashbook_cost_range", match_value: "912-912", category: "Interest Income", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: cashbook CI 912 interest income", active: true, main_group: "Inflows", sub_group: "Investment Income" },
-    { rule_code: "RULE-0030", rule_type: "description_contains", match_value: "JE27", category: "Cash Book", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: JE27 cash book entry", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0031", rule_type: "description_contains", match_value: "JE 09MA", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE09MA transfer (excluded from base case)", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    // ── NEW rules from procedures update 27 Apr 2026 ──────────────────────────
-    { rule_code: "RULE-0032", rule_type: "description_contains", match_value: "JE 09TA", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE09TA transfer (excluded from base case)", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    { rule_code: "RULE-0033", rule_type: "description_contains", match_value: "JE 26B", category: "Transfer", base_case_row: "", applies_to: "cashbook", paygroup_filter: "", notes: "Procedure: JE26B transfer (excluded from base case)", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    { rule_code: "RULE-0034", rule_type: "fpc_equals", match_value: "12806", category: "Dividend", base_case_row: "Dividend Received", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: dividend received FERC 12806", active: true, main_group: "Inflows", sub_group: "Investment Income" },
-    { rule_code: "RULE-0035", rule_type: "fpc_equals", match_value: "42101", category: "Dividend", base_case_row: "Dividend Received", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: dividend received FERC 42101", active: true, main_group: "Inflows", sub_group: "Investment Income" },
-    { rule_code: "RULE-0036", rule_type: "cashbook_cost_range", match_value: "13101-13101", category: "Sinking Fund", base_case_row: "Long-term Debt Financing", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13101 NCB/Sinking Fund (JE26B < US$200K = Sinking Fund)", active: true, main_group: "Financing", sub_group: "Debt Service" },
-    { rule_code: "RULE-0037", rule_type: "cashbook_cost_range", match_value: "13102-13102", category: "Payroll", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13102 Payroll bank account", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0038", rule_type: "cashbook_cost_range", match_value: "13104-13104", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13104 BNS Cheques / Transfer", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    { rule_code: "RULE-0039", rule_type: "cashbook_cost_range", match_value: "13111-13111", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13111 Transfer", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    { rule_code: "RULE-0040", rule_type: "cashbook_cost_range", match_value: "13118-13118", category: "Supplier", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13118 Supplier (FERC 13118)", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0041", rule_type: "cashbook_cost_range", match_value: "13119-13119", category: "RBTT Cheques", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13119 RBTT Cheques", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0042", rule_type: "cashbook_cost_range", match_value: "13123-13123", category: "Citibank Cheques", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13123 Citibank Cheques", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0043", rule_type: "cashbook_cost_range", match_value: "13126-13126", category: "BNS F/X", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13126 BNS F/X Cheques", active: true, main_group: "Inflows", sub_group: "Treasury & F/X" },
-    { rule_code: "RULE-0044", rule_type: "cashbook_cost_range", match_value: "13129-13129", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13129 Transfer", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    { rule_code: "RULE-0045", rule_type: "cashbook_cost_range", match_value: "13149-13149", category: "Transfer", base_case_row: "", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13149 Transfer", active: true, main_group: "Non-Cash / Transfers", sub_group: "Inter-Account Transfers" },
-    { rule_code: "RULE-0046", rule_type: "cashbook_cost_range", match_value: "13175-13175", category: "Expense Cheques", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: CI 13175 Expense Cheques", active: true, main_group: "Inflows", sub_group: "Collections" },
-    { rule_code: "RULE-0047", rule_type: "description_contains", match_value: "F/X PURCHASE", category: "F/X Purchase", base_case_row: "Collections", applies_to: "cashbook_debit", paygroup_filter: "", notes: "Procedure: F/X Purchase (Payables/Purchase source)", active: true, main_group: "Inflows", sub_group: "Treasury & F/X" }
-  ];
 
   const state = {
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
@@ -648,7 +597,7 @@
       state.supabase.from("cashflow_rules").update({ sort_order: newB }).eq("rule_code", ruleB.rule_code)
     ]);
     if (resA.error || resB.error) return setStatus((resA.error || resB.error).message, "error");
-    await loadRules(false);
+    await loadRules();
   }
 
   function renderAudit() {
@@ -721,23 +670,12 @@
   async function init() {
     if (!(await ensureSupabase())) return;
     setStatus("Connected.", "ok");
-    await Promise.all([loadRules(true), loadMonths(), loadAudit(), loadSettings()]);
+    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings()]);
   }
 
-  async function loadRules(syncDefaults = true) {
+  async function loadRules() {
     const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("rule_code");
     if (error) return setStatus(error.message, "error");
-
-    if (syncDefaults && (!data || data.length === 0)) {
-      // Only seed defaults when the rules table is completely empty (first-time setup).
-      // Once any rules exist the user owns the list — deletions are permanent.
-      const rows = defaultRules.map((r) => ({ ...r, created_by: "system (initial-seed)", updated_by: "system (initial-seed)" }));
-      const { error: insertErr } = await state.supabase.from("cashflow_rules").insert(rows);
-      if (insertErr) return setStatus(insertErr.message, "error");
-      await auditLog("sync_rules", null, null, `Seeded ${rows.length} default rules (first-time setup)`);
-      return loadRules(false);
-    }
-
     state.rules = data || [];
     renderRules();
   }
@@ -805,7 +743,7 @@
     const { error } = await state.supabase.from("cashflow_rules").upsert(parsed, { onConflict: "rule_code" });
     if (error) return setStatus(error.message, "error");
     await auditLog("import_rules", currentMonthKey(), "", `Imported ${parsed.length} rules from CSV`);
-    await loadRules(false);
+    await loadRules();
   }
 
   // ── Edge function helper ──────────────────────────────────────────
@@ -994,8 +932,7 @@
       const apRows = parseAp(uploads.ap, "invoice_payments.txt");
       const sourceRows = [...cashbookRows, ...apRows];
       setStatus(`Parsed ${sourceRows.toLocaleString ? sourceRows.length.toLocaleString() : sourceRows.length} records (${apRows.length.toLocaleString()} AP + ${cashbookRows.length.toLocaleString()} cashbook). Applying rules…`, "");
-      const activeRules = state.rules.length ? state.rules : defaultRules;
-      const processed = applyMappings(sourceRows, activeRules);
+      const processed = applyMappings(sourceRows, state.rules);
       const unmapped = processed.filter((r) => !r.mapped).length;
       setStatus(`Mapped ${processed.length.toLocaleString()} records — ${unmapped} unmapped. Saving to database…`, "");
       state.records = processed;
@@ -1288,7 +1225,7 @@
     if (error) return setStatus(error.message, "error");
     await auditLog("save_rule", currentMonthKey(), rule.rule_code, `${rule.rule_type}: ${rule.match_value} → ${rule.category}`);
     $("ruleCodeValue").value = rule.rule_code;
-    await loadRules(false);
+    await loadRules();
     await loadAudit();
     setStatus(`Saved rule ${rule.rule_code}`, "ok");
     if (state.loadedMonth) showReapplyPrompt();
@@ -1299,7 +1236,7 @@
     const { error } = await state.supabase.from("cashflow_rules").delete().eq("rule_code", ruleCode);
     if (error) return setStatus(error.message, "error");
     await auditLog("delete_rule", currentMonthKey(), ruleCode, "Deleted rule");
-    await loadRules(false);
+    await loadRules();
     await loadAudit();
     setStatus(`Deleted rule ${ruleCode}`, "ok");
   }
