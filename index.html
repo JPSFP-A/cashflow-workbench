@@ -813,17 +813,11 @@
                   </select>
                 </div>
                 <div class="form-field">
-                  <label>Main Group</label>
-                  <!-- Options populated dynamically from live rules by refreshFormDropdowns() -->
-                  <select id="mainGroupValue">
-                    <option value="">— Select —</option>
+                  <label>Sub Group <span class="hint" style="font-weight:400">(optional — cashbook rules; AP uses pay group automatically)</span></label>
+                  <!-- Options filtered by selected Base Case Row via filterSubGroupByBaseRow() -->
+                  <select id="subGroupValue">
+                    <option value="">— Select sub-group —</option>
                   </select>
-                </div>
-                <div class="form-field" id="subGroupRow">
-                  <label>Sub Group <span class="hint" style="font-weight:400">(cashbook rules only — AP uses pay group automatically)</span></label>
-                  <input id="subGroupValue" list="subGroupList" placeholder="Type a group name (suggestions from saved rules)…" autocomplete="off">
-                  <!-- Suggestions populated dynamically from live rules by refreshFormDropdowns() -->
-                  <datalist id="subGroupList"></datalist>
                 </div>
                 <div class="form-field">
                   <label>Notes</label>
@@ -917,6 +911,29 @@
           </div>
           <div class="tablebox tall"><table id="adminMonthTable"></table></div>
         </div>
+
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-head">Sub Group Lookup</div>
+          <p class="hint" style="padding:0 16px 10px">Maps each Base Case Row to its Sub Group options shown in rule forms. Add or remove entries here.</p>
+          <div style="display:flex;gap:8px;align-items:flex-end;padding:0 16px 12px;flex-wrap:wrap">
+            <div class="form-field" style="margin:0;min-width:200px">
+              <label style="font-size:12px;font-weight:600">Base Row</label>
+              <select id="sgBaseRow" style="height:32px;font-size:13px">
+                <option value="">— Select base row —</option>
+              </select>
+            </div>
+            <div class="form-field" style="margin:0;min-width:160px">
+              <label style="font-size:12px;font-weight:600">Sub Group</label>
+              <input id="sgSubGroup" placeholder="e.g. Collections" style="height:32px;font-size:13px">
+            </div>
+            <div class="form-field" style="margin:0;width:70px">
+              <label style="font-size:12px;font-weight:600">Sort</label>
+              <input id="sgSortOrder" type="number" placeholder="0" style="height:32px;font-size:13px">
+            </div>
+            <button class="btn btn-teal btn-sm" id="sgAddBtn" style="height:32px">+ Add</button>
+          </div>
+          <div class="tablebox"><table id="subGroupsAdminTable"></table></div>
+        </div>
       </div>
 
       <!-- ── Instructions ── -->
@@ -945,7 +962,7 @@
               <tr><td><b>Base Case Row</b></td><td>Assigned by rule</td><td>The cashflow model reporting line (e.g. Fuel, Loan Principal, Supplier/Contractor). Top level in all summaries.</td></tr>
               <tr><td><b>Category</b></td><td>Assigned by rule</td><td>Granular rule label (e.g. JPS FUEL, Capital, Payroll). Adds detail beneath the base case row.</td></tr>
               <tr><td><b>Pay Group</b></td><td><code>pay_group</code> — direct from Oracle AP</td><td>Natural sub-grouping for AP records (FUEL, LOAN, SUPPLIER, EMPLOYEE, TAX, PURCHASE POWER…). Used as the sub-group dimension in the Multi-Month Report. No manual entry needed.</td></tr>
-              <tr><td><b>Main Group</b></td><td>Assigned by rule</td><td>Broadest reporting tier. Values are user-defined on rules — whatever you type becomes available in the dropdown for future rules.</td></tr>
+              <tr><td><b>Sub Group</b></td><td>Assigned by rule</td><td>Optional sub-grouping for AP rules. Options come from the Sub Group Lookup table (Admin tab). AP records also carry pay_group from Oracle, which the Multi-Month Report uses as the default sub-grouping dimension.</td></tr>
               <tr><td><b>FPC</b></td><td><code>fpc</code> — account segment</td><td>Oracle function/project code. Used by FPC-based rules.</td></tr>
               <tr><td><b>Vendor</b></td><td><code>vendor</code></td><td>Supplier name. Used by vendor_contains rules.</td></tr>
             </tbody>
@@ -957,8 +974,7 @@
             <tbody>
               <tr><td><b>Base Case Row</b></td><td>Assigned by rule</td><td>The cashflow model reporting line (e.g. Collections, Long-term Debt Financing). Same concept as AP.</td></tr>
               <tr><td><b>Category</b></td><td>Assigned by rule</td><td>Granular label (e.g. Interest Income, F/X Gain/(Loss), Sinking Fund, Transfer).</td></tr>
-              <tr><td><b>Sub Group</b></td><td>Assigned by rule</td><td>Sub-grouping dimension for cashbook records — replaces pay_group which is not available in the cashbook source (e.g. Collections, Treasury &amp; F/X, Investment Income, Debt Service).</td></tr>
-              <tr><td><b>Main Group</b></td><td>Assigned by rule</td><td>Broadest reporting tier — same set as AP.</td></tr>
+              <tr><td><b>Sub Group</b></td><td>Assigned by rule</td><td>Sub-grouping dimension for cashbook records — replaces pay_group which is not available in the cashbook source. Options managed in Admin → Sub Group Lookup (e.g. Collections, Treasury &amp; F/X, Investment Income, Debt Service).</td></tr>
               <tr><td><b>FPC / Cost Item</b></td><td>Account segments</td><td>Used by cashbook_cost_range and FPC rules.</td></tr>
               <tr><td><b>Pay Group</b></td><td><em>Not available</em></td><td>Always blank for cashbook records. Sub Group is used instead.</td></tr>
             </tbody>
@@ -973,8 +989,7 @@
             <li><b>Category:</b> The granular label written onto each matched record (becomes <em>cashbook_category</em>).</li>
             <li><b>Base Case Row:</b> The model reporting line the record maps to.</li>
             <li><b>Applies to:</b> Which source records the rule targets — AP outflows, cashbook debits, cashbook credits, or all.</li>
-            <li><b>Main Group:</b> Broadest reporting tier. Select from the dropdown.</li>
-            <li><b>Sub Group:</b> <em>Cashbook rules only.</em> AP records use pay group (from Oracle) automatically — no sub group needed on AP rules.</li>
+            <li><b>Sub Group:</b> Optional. Options are filtered by the selected Base Case Row (configured in Admin → Sub Group Lookup). AP records use pay group from Oracle automatically — sub group is mainly used for cashbook rules.</li>
             <li><b>Notes:</b> Free-text reference for the procedure or rationale.</li>
           </ul>
           <p class="hint">Rule order matters — first match wins. More specific multi-condition rules must appear above broad single-condition fallbacks (e.g. RULE-0023 Supplier catch-all).</p>

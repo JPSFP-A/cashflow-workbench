@@ -13,7 +13,7 @@
 
 
   const state = {
-    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
+    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [],
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, multiCollapsed: new Set(), settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
@@ -553,26 +553,29 @@
     ], rows);
   }
 
-  // Rebuild all rule-form dropdowns from live rule data — no hardcoded lists
+  // Rebuild base-row dropdown from live rule data
   function refreshFormDropdowns() {
     const baseRowSel = $("baseRowValue");
     if (baseRowSel) {
       const cur = baseRowSel.value;
       baseRowSel.innerHTML = `<option value="">Leave unassigned</option>${liveBaseRows().map((r) => `<option>${esc(r)}</option>`).join("")}`;
-      baseRowSel.value = cur; // restore selection if still valid
+      baseRowSel.value = cur;
     }
-    const mainGroupSel = $("mainGroupValue");
-    if (mainGroupSel) {
-      const cur = mainGroupSel.value;
-      const groups = [...new Set(state.rules.map((r) => r.main_group).filter(Boolean))].sort();
-      mainGroupSel.innerHTML = `<option value="">— Select —</option>${groups.map((g) => `<option>${esc(g)}</option>`).join("")}`;
-      mainGroupSel.value = cur;
-    }
-    const subGroupList = $("subGroupList");
-    if (subGroupList) {
-      const subs = [...new Set(state.rules.map((r) => r.sub_group).filter(Boolean))].sort();
-      subGroupList.innerHTML = subs.map((s) => `<option>${esc(s)}</option>`).join("");
-    }
+    filterSubGroupByBaseRow();
+  }
+
+  // Filter the Sub Group select to entries matching the currently selected base row.
+  // When no base row is selected, shows all active sub-groups.
+  function filterSubGroupByBaseRow() {
+    const sel = $("subGroupValue");
+    if (!sel || sel.tagName !== "SELECT") return;
+    const baseRow = $("baseRowValue") ? $("baseRowValue").value : "";
+    const cur = sel.value;
+    const entries = baseRow
+      ? state.subGroups.filter((sg) => sg.base_case_row === baseRow && sg.active !== false)
+      : state.subGroups.filter((sg) => sg.active !== false);
+    sel.innerHTML = `<option value="">— Select sub-group —</option>${entries.map((sg) => `<option>${esc(sg.sub_group)}</option>`).join("")}`;
+    if (cur) sel.value = cur; // restore if still in list
   }
 
   function renderRules() {
@@ -724,7 +727,56 @@
   async function init() {
     if (!(await ensureSupabase())) return;
     setStatus("Connected.", "ok");
-    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings()]);
+    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings(), loadSubGroups()]);
+  }
+
+  async function loadSubGroups() {
+    const { data, error } = await state.supabase
+      .from("cashflow_sub_groups")
+      .select("id,base_case_row,sub_group,sort_order,active")
+      .order("base_case_row").order("sort_order", { ascending: true, nullsFirst: false }).order("sub_group");
+    if (error) return setStatus(error.message, "error");
+    state.subGroups = data || [];
+    filterSubGroupByBaseRow();
+    renderSubGroupsAdmin();
+  }
+
+  function renderSubGroupsAdmin() {
+    const tbl = $("subGroupsAdminTable");
+    if (!tbl) return;
+    if (!state.subGroups.length) {
+      tbl.innerHTML = "<thead><tr><th>Base Row</th><th>Sub Group</th><th>Order</th><th></th></tr></thead><tbody><tr><td colspan='4' style='color:var(--muted);padding:14px'>No entries yet — add one below.</td></tr></tbody>";
+      return;
+    }
+    const rows = state.subGroups.map((sg) =>
+      `<tr style="${sg.active === false ? "opacity:.45;" : ""}">
+        <td>${esc(sg.base_case_row)}</td>
+        <td>${esc(sg.sub_group)}</td>
+        <td class="num">${sg.sort_order ?? "—"}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="window.cashflowApp.deleteSubGroup('${esc(sg.id)}')">✕</button></td>
+      </tr>`).join("");
+    tbl.innerHTML = `<thead><tr><th>Base Row</th><th>Sub Group</th><th style="width:60px">Order</th><th style="width:50px"></th></tr></thead><tbody>${rows}</tbody>`;
+  }
+
+  async function addSubGroupEntry() {
+    const baseRow  = ($("sgBaseRow")    ? $("sgBaseRow").value.trim()    : "");
+    const subGroup = ($("sgSubGroup")   ? $("sgSubGroup").value.trim()   : "");
+    const order    = ($("sgSortOrder")  ? parseInt($("sgSortOrder").value, 10) || null : null);
+    if (!baseRow || !subGroup) return setStatus("Base row and sub group name are required.", "error");
+    const { error } = await state.supabase.from("cashflow_sub_groups").insert([{ base_case_row: baseRow, sub_group: subGroup, sort_order: order }]);
+    if (error) return setStatus(error.message, "error");
+    if ($("sgSubGroup"))  $("sgSubGroup").value  = "";
+    if ($("sgSortOrder")) $("sgSortOrder").value = "";
+    await loadSubGroups();
+    setStatus(`Added: ${baseRow} → ${subGroup}`, "ok");
+  }
+
+  async function deleteSubGroup(id) {
+    if (!confirm("Delete this sub-group entry?")) return;
+    const { error } = await state.supabase.from("cashflow_sub_groups").delete().eq("id", id);
+    if (error) return setStatus(error.message, "error");
+    await loadSubGroups();
+    setStatus("Deleted.", "ok");
   }
 
   async function loadRules() {
@@ -1207,10 +1259,8 @@
     $("baseRowValue").value = row.base_case_row || "";
     $("appliesTo").value = row.data_source === "Invoice Payments" ? "ap" : row.role === "Inflow" ? "cashbook_debit" : "cashbook_credit";
     $("notesValue").value = `Created from ${recordKey}`;
-    if ($("mainGroupValue")) $("mainGroupValue").value = row.main_group || "";
+    filterSubGroupByBaseRow();
     if ($("subGroupValue"))  $("subGroupValue").value  = row.sub_group  || "";
-    const subGroupRow = $("subGroupRow");
-    if (subGroupRow) subGroupRow.style.display = $("appliesTo").value === "ap" ? "none" : "";
     // Switch to exceptions tab (rule form is in the right panel) and scroll rule form into view
     document.querySelector('.tab-btn[data-tab="exceptions"]').click();
     setTimeout(() => $("matchValue").focus(), 50);
@@ -1226,7 +1276,7 @@
     $("baseRowValue").value = rule.base_case_row || "";
     $("appliesTo").value = rule.applies_to;
     $("notesValue").value = rule.notes || "";
-    if ($("mainGroupValue")) $("mainGroupValue").value = rule.main_group || "";
+    filterSubGroupByBaseRow();
     if ($("subGroupValue"))  $("subGroupValue").value  = rule.sub_group  || "";
     if ($("cond2Type"))      $("cond2Type").value      = rule.cond2_type  || "";
     if ($("cond2Value"))     $("cond2Value").value     = rule.cond2_value || "";
@@ -1240,9 +1290,9 @@
   }
 
   function clearRule() {
-    ["ruleCodeValue", "matchValue", "categoryValue", "notesValue", "subGroupValue",
+    ["ruleCodeValue", "matchValue", "categoryValue", "notesValue",
      "cond2Value", "cond3Value", "sortOrderValue"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
-    if ($("mainGroupValue")) $("mainGroupValue").value = "";
+    if ($("subGroupValue")) $("subGroupValue").value = "";
     if ($("cond2Type"))  $("cond2Type").value  = "";
     if ($("cond3Type"))  $("cond3Type").value  = "";
     $("baseRowValue").value = "";
@@ -1268,7 +1318,7 @@
       applies_to:   $("appliesTo").value,
       paygroup_filter: "",
       notes:       $("notesValue").value.trim(),
-      main_group:  ($("mainGroupValue") ? $("mainGroupValue").value.trim() : ""),
+      main_group:  "",
       sub_group:   ($("subGroupValue")  ? $("subGroupValue").value.trim()  : ""),
       sort_order:  $("sortOrderValue") ? (parseInt($("sortOrderValue").value, 10) || null) : null,
       active: true,
@@ -1695,7 +1745,7 @@
 
     // Dirty indicator — show "Unsaved changes" when the rule form is modified
     const ruleDirtyHint = $("ruleDirtyHint");
-    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","cond2Type","cond2Value","cond3Type","cond3Value","categoryValue","baseRowValue","appliesTo","notesValue","mainGroupValue","subGroupValue","sortOrderValue"];
+    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","cond2Type","cond2Value","cond3Type","cond3Value","categoryValue","baseRowValue","appliesTo","notesValue","subGroupValue","sortOrderValue"];
     const markDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = ""; };
     const clearDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = "none"; };
     ruleFormFields.forEach((id) => {
@@ -1707,17 +1757,19 @@
     $("saveRuleBtn").addEventListener("click", clearDirty, { capture: false });
     $("clearRuleBtn").addEventListener("click", clearDirty, { capture: false });
 
-    // Sub Group visibility: only relevant for cashbook rules.
-    // AP sub-grouping comes from pay_group (already on each record).
-    const subGroupRow = $("subGroupRow");
-    function syncSubGroupVisibility() {
-      if (!subGroupRow) return;
-      const v = $("appliesTo") ? $("appliesTo").value : "ap";
-      subGroupRow.style.display = v === "ap" ? "none" : "";
+    // Sub Group: filter dropdown when base_case_row changes
+    if ($("baseRowValue")) {
+      $("baseRowValue").addEventListener("change", filterSubGroupByBaseRow);
     }
-    if ($("appliesTo")) {
-      $("appliesTo").addEventListener("change", syncSubGroupVisibility);
-      syncSubGroupVisibility(); // run on init
+    // Sub Group admin: add button
+    if ($("sgAddBtn")) {
+      $("sgAddBtn").addEventListener("click", addSubGroupEntry);
+    }
+    // Populate sgBaseRow select with live base rows from rules
+    const sgBaseRowSel = $("sgBaseRow");
+    if (sgBaseRowSel) {
+      const rows = liveBaseRows();
+      sgBaseRowSel.innerHTML = `<option value="">— Select base row —</option>${rows.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("")}`;
     }
     // Drill-down: click any row in grouped base table to load detail on the right
     if ($("groupedBaseTable")) {
@@ -1767,5 +1819,5 @@
   bindUi();
   init();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup };
 })();
