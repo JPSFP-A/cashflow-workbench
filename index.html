@@ -751,10 +751,6 @@
                   </select>
                 </div>
                 <div class="form-field">
-                  <label>Optional pay group filter</label>
-                  <input id="paygroupFilterValue">
-                </div>
-                <div class="form-field">
                   <label>Main Group</label>
                   <select id="mainGroupValue">
                     <option value="">— Select —</option>
@@ -767,7 +763,26 @@
                 </div>
                 <div class="form-field">
                   <label>Sub Group</label>
-                  <input id="subGroupValue" placeholder="e.g. Energy & Power, Personnel, Debt Service">
+                  <input id="subGroupValue" list="subGroupList" placeholder="Select or type a new group…" autocomplete="off">
+                  <datalist id="subGroupList">
+                    <option>Collections</option>
+                    <option>Treasury &amp; F/X</option>
+                    <option>Investment Income</option>
+                    <option>Energy &amp; Power</option>
+                    <option>Personnel</option>
+                    <option>Suppliers &amp; Contractors</option>
+                    <option>Taxes &amp; Duties</option>
+                    <option>Regulatory</option>
+                    <option>Insurance</option>
+                    <option>Fleet &amp; Transport</option>
+                    <option>Property &amp; Leases</option>
+                    <option>Corporate &amp; Other</option>
+                    <option>Supplies &amp; Materials</option>
+                    <option>Capital Projects</option>
+                    <option>Debt Service</option>
+                    <option>Inter-Account Transfers</option>
+                    <option>Bank Charges</option>
+                  </datalist>
                 </div>
                 <div class="form-field">
                   <label>Notes</label>

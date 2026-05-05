@@ -1119,7 +1119,6 @@
     $("categoryValue").value = row.cashbook_category === "Unmapped" ? "" : row.cashbook_category;
     $("baseRowValue").value = row.base_case_row || "";
     $("appliesTo").value = row.data_source === "Invoice Payments" ? "ap" : row.role === "Inflow" ? "cashbook_debit" : "cashbook_credit";
-    $("paygroupFilterValue").value = "";
     $("notesValue").value = `Created from ${recordKey}`;
     if ($("mainGroupValue")) $("mainGroupValue").value = row.main_group || "";
     if ($("subGroupValue"))  $("subGroupValue").value  = row.sub_group  || "";
@@ -1137,7 +1136,6 @@
     $("categoryValue").value = rule.category;
     $("baseRowValue").value = rule.base_case_row || "";
     $("appliesTo").value = rule.applies_to;
-    $("paygroupFilterValue").value = rule.paygroup_filter || "";
     $("notesValue").value = rule.notes || "";
     if ($("mainGroupValue")) $("mainGroupValue").value = rule.main_group || "";
     if ($("subGroupValue"))  $("subGroupValue").value  = rule.sub_group  || "";
@@ -1146,7 +1144,8 @@
   }
 
   function clearRule() {
-    ["ruleCodeValue", "matchValue", "categoryValue", "paygroupFilterValue", "notesValue", "mainGroupValue", "subGroupValue"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
+    ["ruleCodeValue", "matchValue", "categoryValue", "notesValue", "subGroupValue"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
+    if ($("mainGroupValue")) $("mainGroupValue").value = "";
     $("baseRowValue").value = "";
     $("appliesTo").value = "ap";
     $("ruleType").value = "vendor_contains";
@@ -1162,7 +1161,7 @@
       category: $("categoryValue").value.trim(),
       base_case_row: $("baseRowValue").value,
       applies_to: $("appliesTo").value,
-      paygroup_filter: $("paygroupFilterValue").value.trim(),
+      paygroup_filter: "",
       notes: $("notesValue").value.trim(),
       main_group: ($("mainGroupValue") ? $("mainGroupValue").value.trim() : ""),
       sub_group:  ($("subGroupValue")  ? $("subGroupValue").value.trim()  : ""),
@@ -1569,7 +1568,7 @@
 
     // Dirty indicator — show "Unsaved changes" when the rule form is modified
     const ruleDirtyHint = $("ruleDirtyHint");
-    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","categoryValue","baseRowValue","appliesTo","paygroupFilterValue","notesValue","mainGroupValue","subGroupValue"];
+    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","categoryValue","baseRowValue","appliesTo","notesValue","mainGroupValue","subGroupValue"];
     const markDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = ""; };
     const clearDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = "none"; };
     ruleFormFields.forEach((id) => {
