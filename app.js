@@ -1122,6 +1122,8 @@
     $("notesValue").value = `Created from ${recordKey}`;
     if ($("mainGroupValue")) $("mainGroupValue").value = row.main_group || "";
     if ($("subGroupValue"))  $("subGroupValue").value  = row.sub_group  || "";
+    const subGroupRow = $("subGroupRow");
+    if (subGroupRow) subGroupRow.style.display = $("appliesTo").value === "ap" ? "none" : "";
     // Switch to exceptions tab (rule form is in the right panel) and scroll rule form into view
     document.querySelector('.tab-btn[data-tab="exceptions"]').click();
     setTimeout(() => $("matchValue").focus(), 50);
@@ -1139,6 +1141,8 @@
     $("notesValue").value = rule.notes || "";
     if ($("mainGroupValue")) $("mainGroupValue").value = rule.main_group || "";
     if ($("subGroupValue"))  $("subGroupValue").value  = rule.sub_group  || "";
+    const subGroupRow = $("subGroupRow");
+    if (subGroupRow) subGroupRow.style.display = rule.applies_to === "ap" ? "none" : "";
     document.querySelector('.tab-btn[data-tab="exceptions"]').click();
     setTimeout(() => $("matchValue").focus(), 50);
   }
@@ -1149,6 +1153,8 @@
     $("baseRowValue").value = "";
     $("appliesTo").value = "ap";
     $("ruleType").value = "vendor_contains";
+    const subGroupRow = $("subGroupRow");
+    if (subGroupRow) subGroupRow.style.display = "none"; // default is ap
     hideReapplyPrompt();
   }
 
@@ -1222,7 +1228,7 @@
       while (true) {
         const { data, error } = await state.supabase
           .from("cashflow_records")
-          .select("month_id,base_case_row,cashbook_category,signed_amount")
+          .select("month_id,data_source,base_case_row,pay_group,sub_group,cashbook_category,signed_amount")
           .in("month_id", monthIds)
           .neq("base_case_row", "")
           .range(page * PAGE, (page + 1) * PAGE - 1);
@@ -1235,7 +1241,11 @@
 
       // Two-level aggregation:
       //   sums:    base_case_row → month_key → amount  (top-level totals)
-      //   subSums: base_case_row → cashbook_category → month_key → amount
+      //   subSums: base_case_row → sub-key → month_key → amount
+      //
+      // Sub-key logic by source:
+      //   AP (Invoice Payments) → pay_group  (natural Oracle grouping already on record)
+      //   Cashbook              → sub_group  (manually assigned on rule; pay_group not available)
       const sums    = new Map();
       const subSums = new Map();
       for (const r of all) {
@@ -1246,12 +1256,14 @@
         if (!sums.has(r.base_case_row)) sums.set(r.base_case_row, new Map());
         const byMonth = sums.get(r.base_case_row);
         byMonth.set(mKey, (byMonth.get(mKey) || 0) + amt);
-        // sub-level
+        // sub-level — use pay_group for AP, sub_group for cashbook
+        const subKey = r.data_source === "Invoice Payments"
+          ? (r.pay_group || "Other AP")
+          : (r.sub_group || r.cashbook_category || "Other");
         if (!subSums.has(r.base_case_row)) subSums.set(r.base_case_row, new Map());
         const catMap = subSums.get(r.base_case_row);
-        const cat = r.cashbook_category || "Uncategorised";
-        if (!catMap.has(cat)) catMap.set(cat, new Map());
-        const catMonths = catMap.get(cat);
+        if (!catMap.has(subKey)) catMap.set(subKey, new Map());
+        const catMonths = catMap.get(subKey);
         catMonths.set(mKey, (catMonths.get(mKey) || 0) + amt);
       }
 
@@ -1577,9 +1589,21 @@
       if (el) el.addEventListener("change", markDirty);
     });
     // Clear dirty on successful save or clear
-    const origSaveRule = window.cashflowApp && window.cashflowApp.saveRule;
     $("saveRuleBtn").addEventListener("click", clearDirty, { capture: false });
     $("clearRuleBtn").addEventListener("click", clearDirty, { capture: false });
+
+    // Sub Group visibility: only relevant for cashbook rules.
+    // AP sub-grouping comes from pay_group (already on each record).
+    const subGroupRow = $("subGroupRow");
+    function syncSubGroupVisibility() {
+      if (!subGroupRow) return;
+      const v = $("appliesTo") ? $("appliesTo").value : "ap";
+      subGroupRow.style.display = v === "ap" ? "none" : "";
+    }
+    if ($("appliesTo")) {
+      $("appliesTo").addEventListener("change", syncSubGroupVisibility);
+      syncSubGroupVisibility(); // run on init
+    }
     // Drill-down: click any row in grouped base table to load detail on the right
     if ($("groupedBaseTable")) {
       $("groupedBaseTable").addEventListener("click", (e) => {

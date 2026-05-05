@@ -761,8 +761,8 @@
                     <option>Non-Cash / Transfers</option>
                   </select>
                 </div>
-                <div class="form-field">
-                  <label>Sub Group</label>
+                <div class="form-field" id="subGroupRow">
+                  <label>Sub Group <span class="hint" style="font-weight:400">(cashbook rules only — AP uses pay group automatically)</span></label>
                   <input id="subGroupValue" list="subGroupList" placeholder="Select or type a new group…" autocomplete="off">
                   <datalist id="subGroupList">
                     <option>Collections</option>
@@ -919,16 +919,58 @@
             <li>Enter your name on the welcome screen — it is recorded on every action in the audit log. Click your name badge in the header to change it.</li>
             <li>Select a month in the Month field, or pick a saved month from the dropdown and click <b>↩ Load Month</b>.</li>
             <li>Upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats). The optional Rules Import CSV lets you bulk-load rules from a spreadsheet.</li>
-            <li>Click <b>▶ Process &amp; Save Month</b>. The status bar shows each stage: parsing → rule application → record count → save progress (e.g. "Saving records… 500 / 13,208"). Raw source text and processed records are stored in Supabase.</li>
+            <li>Click <b>▶ Process &amp; Save Month</b>. The status bar shows each stage: parsing → rule application → record count → save progress. Raw source text and processed records are stored in Supabase.</li>
             <li>The <b>Outflow Validation</b> tab opens first. Review AP outflows by base case row and by category, and the cashbook summary side-by-side.</li>
             <li>Switch to <b>Map Exceptions</b> to see unmapped lines or lines with no base case row. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b> to rebuild immediately.</li>
             <li>Use <b>↻ Reapply Rules</b> from the month panel at any time to re-run all rules against the saved source files without re-uploading.</li>
-            <li>Use <b>📊 Multi-Month Report</b> to compare any combination of saved months side-by-side as a base case matrix, then download as Excel.</li>
+            <li>Use <b>📊 Multi-Month Report</b> to compare any combination of saved months side-by-side as a base case matrix, with expandable sub-group rows. Download as Excel.</li>
             <li>Export the single-month Base Case via <b>⬇ Excel Report</b> when the month is finalised.</li>
           </ol>
 
-          <h2>Procedure Logic — AP Rules (47 rules total)</h2>
-          <p>The following rules are pre-loaded and reflect the JPS FP&amp;A cashflow procedures (updated 27 Apr 2026):</p>
+          <h2>Data Model — How Columns Work</h2>
+          <p>Records from the two source files have different natural columns. The system normalises them into a shared set of fields:</p>
+
+          <h3>AP Invoice/Payment Report (Oracle)</h3>
+          <table style="font-size:12px;border-collapse:collapse;width:100%;margin-bottom:12px">
+            <thead><tr><th>Field</th><th>Source column</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><b>Base Case Row</b></td><td>Assigned by rule</td><td>The cashflow model reporting line (e.g. Fuel, Loan Principal, Supplier/Contractor). Top level in all summaries.</td></tr>
+              <tr><td><b>Category</b></td><td>Assigned by rule</td><td>Granular rule label (e.g. JPS FUEL, Capital, Payroll). Adds detail beneath the base case row.</td></tr>
+              <tr><td><b>Pay Group</b></td><td><code>pay_group</code> — direct from Oracle AP</td><td>Natural sub-grouping for AP records (FUEL, LOAN, SUPPLIER, EMPLOYEE, TAX, PURCHASE POWER…). Used as the sub-group dimension in the Multi-Month Report. No manual entry needed.</td></tr>
+              <tr><td><b>Main Group</b></td><td>Assigned by rule</td><td>Broadest reporting tier (Inflows, Operating Outflows, Capital Outflows, Financing, Non-Cash / Transfers).</td></tr>
+              <tr><td><b>FPC</b></td><td><code>fpc</code> — account segment</td><td>Oracle function/project code. Used by FPC-based rules.</td></tr>
+              <tr><td><b>Vendor</b></td><td><code>vendor</code></td><td>Supplier name. Used by vendor_contains rules.</td></tr>
+            </tbody>
+          </table>
+
+          <h3>Cashbook (JPS Ledger exports)</h3>
+          <table style="font-size:12px;border-collapse:collapse;width:100%;margin-bottom:12px">
+            <thead><tr><th>Field</th><th>Source column</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><b>Base Case Row</b></td><td>Assigned by rule</td><td>The cashflow model reporting line (e.g. Collections, Long-term Debt Financing). Same concept as AP.</td></tr>
+              <tr><td><b>Category</b></td><td>Assigned by rule</td><td>Granular label (e.g. Interest Income, F/X Gain/(Loss), Sinking Fund, Transfer).</td></tr>
+              <tr><td><b>Sub Group</b></td><td>Assigned by rule</td><td>Sub-grouping dimension for cashbook records — replaces pay_group which is not available in the cashbook source (e.g. Collections, Treasury &amp; F/X, Investment Income, Debt Service).</td></tr>
+              <tr><td><b>Main Group</b></td><td>Assigned by rule</td><td>Broadest reporting tier — same set as AP.</td></tr>
+              <tr><td><b>FPC / Cost Item</b></td><td>Account segments</td><td>Used by cashbook_cost_range and FPC rules.</td></tr>
+              <tr><td><b>Pay Group</b></td><td><em>Not available</em></td><td>Always blank for cashbook records. Sub Group is used instead.</td></tr>
+            </tbody>
+          </table>
+
+          <p class="hint"><b>Multi-Month sub-rows:</b> For AP records the sub-group column in the report is the Oracle pay group (e.g. FUEL, LOAN). For cashbook records it is the sub group assigned on the rule.</p>
+
+          <h2>Rule Form Fields</h2>
+          <ul>
+            <li><b>Rule type / Match value:</b> What the rule matches — vendor name, pay group text, FPC code, description keyword, or cashbook cost item range.</li>
+            <li><b>Category:</b> The granular label written onto each matched record (becomes <em>cashbook_category</em>).</li>
+            <li><b>Base Case Row:</b> The model reporting line the record maps to.</li>
+            <li><b>Applies to:</b> Which source records the rule targets — AP outflows, cashbook debits, cashbook credits, or all.</li>
+            <li><b>Main Group:</b> Broadest reporting tier. Select from the dropdown.</li>
+            <li><b>Sub Group:</b> <em>Cashbook rules only.</em> AP records use pay group (from Oracle) automatically — no sub group needed on AP rules.</li>
+            <li><b>Notes:</b> Free-text reference for the procedure or rationale.</li>
+          </ul>
+
+          <h2>AP Rules — 47 rules (updated 27 Apr 2026)</h2>
+          <p>Rules run top-to-bottom; first match wins. More specific rules must appear before broad pay group fallbacks.</p>
           <ul>
             <li><b>IPP:</b> Pay group contains "PURCHASE POWER"</li>
             <li><b>Capital:</b> FPC 18601 or 30000–39999, Supplier pay group</li>
@@ -947,37 +989,35 @@
             <li><b>Supplier (default):</b> Pay group contains "SUPPLIER"</li>
           </ul>
 
-          <h2>Procedure Logic — Cashbook Rules (updated 27 Apr 2026)</h2>
+          <h2>Cashbook Rules — (updated 27 Apr 2026)</h2>
           <ul>
             <li><b>CI 1–99:</b> Payroll → Collections</li>
             <li><b>CI 321–322:</b> F/X Gain/(Loss) → Collections</li>
-            <li><b>CI 352:</b> Interest Income → Collections</li>
-            <li><b>CI 380, 395:</b> Bank Charge (credit side, excluded from Base Case)</li>
-            <li><b>CI 912:</b> Interest Income → Collections</li>
+            <li><b>CI 352, 912:</b> Interest Income → Collections</li>
+            <li><b>CI 380, 395:</b> Bank Charge (credit side — excluded from Base Case)</li>
             <li><b>JE27:</b> Cash Book → Collections</li>
-            <li><b>JE 09MA, JE 09TA:</b> Transfer (excluded from Base Case) ★ new</li>
-            <li><b>JE 26B:</b> Transfer (excluded from Base Case) ★ new</li>
-            <li><b>FERC 12806, 42101:</b> Dividend Received ★ new</li>
-            <li><b>CI 13101:</b> Sinking Fund → Long-term Debt Financing ★ new</li>
-            <li><b>CI 13102:</b> Payroll → Collections ★ new</li>
-            <li><b>CI 13104, 13111, 13129, 13149:</b> Transfer (excluded) ★ new</li>
-            <li><b>CI 13118:</b> Supplier → Collections ★ new</li>
-            <li><b>CI 13119:</b> RBTT Cheques → Collections ★ new</li>
-            <li><b>CI 13123:</b> Citibank Cheques → Collections ★ new</li>
-            <li><b>CI 13126:</b> BNS F/X Cheques → Collections ★ new</li>
-            <li><b>CI 13175:</b> Expense Cheques → Collections ★ new</li>
-            <li><b>F/X Purchase:</b> F/X Purchase → Collections ★ new</li>
+            <li><b>JE 09MA, JE 09TA, JE 26B:</b> Transfer — excluded from Base Case</li>
+            <li><b>FERC 12806, 42101:</b> Dividend Received</li>
+            <li><b>CI 13101:</b> Sinking Fund → Long-term Debt Financing</li>
+            <li><b>CI 13102:</b> Payroll → Collections</li>
+            <li><b>CI 13104, 13111, 13129, 13149:</b> Transfer — excluded from Base Case</li>
+            <li><b>CI 13118:</b> Supplier → Collections</li>
+            <li><b>CI 13119:</b> RBTT Cheques → Collections</li>
+            <li><b>CI 13123:</b> Citibank Cheques → Collections</li>
+            <li><b>CI 13126:</b> BNS F/X Cheques → Collections</li>
+            <li><b>CI 13175:</b> Expense Cheques → Collections</li>
+            <li><b>F/X Purchase (description):</b> F/X Purchase → Collections</li>
           </ul>
-          <p class="hint">★ Rules added from procedures update dated 27 Apr 2026. Run <b>↻ Reapply Rules</b> on each saved month to apply the new rules to historical data.</p>
+          <p class="hint">Run <b>↻ Reapply Rules</b> on each saved month after adding or changing rules to apply changes to historical data.</p>
 
           <h2>Notes</h2>
           <ul>
-            <li>Cashbook debits are the receipt side (Collections row). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
-            <li>AP invoice/payment report is the primary source for categorising outflows.</li>
-            <li>Transfers (JE09MA, JE09TA, JE26B, CI 13104/13111/13129/13149) have no base case row and are excluded from all summaries.</li>
-            <li>Reset / Wipe removes all records and uploads for the month and logs the action. You will need to re-upload files to reprocess after a reset.</li>
-            <li>No login password is required. Your name is captured from the welcome screen and stamped on every save, rule change, and audit log entry.</li>
-            <li>The Multi-Month Report queries the database directly for each selected month — no need to have a month loaded first.</li>
+            <li>Cashbook debits are the receipt side (Collections). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
+            <li>AP invoice/payment report is the primary source for classifying outflows.</li>
+            <li>Records with no base case row (transfers, bank charges) are excluded from all Base Case and Multi-Month summaries.</li>
+            <li>Reset / Wipe removes all records and uploads for the month. You will need to re-upload source files to reprocess after a reset.</li>
+            <li>No password is required. Your name from the welcome screen is stamped on every save, rule change, and audit log entry.</li>
+            <li>The Multi-Month Report queries the database directly — no need to have a month loaded first.</li>
           </ul>
         </div>
       </div>
