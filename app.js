@@ -555,11 +555,19 @@
 
   // Rebuild base-row dropdown from live rule data
   function refreshFormDropdowns() {
+    const rows = liveBaseRows();
     const baseRowSel = $("baseRowValue");
     if (baseRowSel) {
       const cur = baseRowSel.value;
-      baseRowSel.innerHTML = `<option value="">Leave unassigned</option>${liveBaseRows().map((r) => `<option>${esc(r)}</option>`).join("")}`;
+      baseRowSel.innerHTML = `<option value="">Leave unassigned</option>${rows.map((r) => `<option>${esc(r)}</option>`).join("")}`;
       baseRowSel.value = cur;
+    }
+    // Also refresh the admin sub-group lookup base-row select
+    const sgBaseRowSel = $("sgBaseRow");
+    if (sgBaseRowSel) {
+      const cur = sgBaseRowSel.value;
+      sgBaseRowSel.innerHTML = `<option value="">— Select base row —</option>${rows.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("")}`;
+      if (cur) sgBaseRowSel.value = cur;
     }
     filterSubGroupByBaseRow();
   }
@@ -1764,12 +1772,6 @@
     // Sub Group admin: add button
     if ($("sgAddBtn")) {
       $("sgAddBtn").addEventListener("click", addSubGroupEntry);
-    }
-    // Populate sgBaseRow select with live base rows from rules
-    const sgBaseRowSel = $("sgBaseRow");
-    if (sgBaseRowSel) {
-      const rows = liveBaseRows();
-      sgBaseRowSel.innerHTML = `<option value="">— Select base row —</option>${rows.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("")}`;
     }
     // Drill-down: click any row in grouped base table to load detail on the right
     if ($("groupedBaseTable")) {
