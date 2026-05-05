@@ -525,9 +525,12 @@
       { label: "Source",        key: "data_source" },
       { label: "CB Source",     key: "source",          render: (r) => r.source ? esc(r.source) : "" },
       { label: "CB Category",   key: "category_code",   render: (r) => r.category_code ? esc(r.category_code) : "" },
+      { label: "Account",       key: "account",         render: (r) => r.account ? esc(r.account) : "" },
+      { label: "Cost Item",     key: "cost_item",       render: (r) => r.cost_item ? esc(r.cost_item) : "" },
+      { label: "Bank Acct",     key: "bank_account",    render: (r) => r.bank_account ? esc(r.bank_account) : "" },
+      { label: "FPC",           key: "fpc" },
       { label: "Vendor",        key: "vendor" },
       { label: "Pay Group",     key: "pay_group" },
-      { label: "FPC",           key: "fpc" },
       { label: "Mapped Cat",    key: "cashbook_category" },
       { label: "Description",   key: "description" },
       { label: "Amount",        key: "amount", num: true, render: (r) => money(r.amount) },
@@ -1204,7 +1207,7 @@
   }
 
   // Slim column set for fast initial load — used for all calculations and rendering.
-  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule,main_group,sub_group,jobno";
+  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,bank_account,cashbook_category,base_case_row,mapped,mapping_rule,main_group,sub_group,jobno";
   // AP detail columns — fetched lazily only when the Exceptions tab is opened.
   const AP_DETAIL_COLS = "record_key,cc,jobno,invoice_no,invoice_date,vendor_no,emp_no,acct_date,amount_original,voucher_number,po_no,operating_unit,bank_account,check_no,check_date,amount_paid,void_flag,currency,line_no";
 
