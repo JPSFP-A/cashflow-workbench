@@ -57,7 +57,7 @@
   const state = {
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [],
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
-    multiReport: null, settings: {},
+    multiReport: null, multiCollapsed: new Set(), settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
     apDetailLoaded: false,        // true when AP detail columns merged into state.records
     baseDetailFilter: null        // {base_case_row, cashbook_category} for drill-down
@@ -1217,13 +1217,13 @@
       const monthMap = new Map((mRows || []).map((m) => [m.id, m.month_key]));
       const monthIds = [...monthMap.keys()];
 
-      // Paginate — select signed_amount so outflows net off against inflows
+      // Paginate — include cashbook_category for sub-group breakdown
       const PAGE = 5000;
       let all = [], page = 0;
       while (true) {
         const { data, error } = await state.supabase
           .from("cashflow_records")
-          .select("month_id,base_case_row,signed_amount")
+          .select("month_id,base_case_row,cashbook_category,signed_amount")
           .in("month_id", monthIds)
           .neq("base_case_row", "")
           .range(page * PAGE, (page + 1) * PAGE - 1);
@@ -1234,14 +1234,26 @@
         page++;
       }
 
-      // Aggregate using signed_amount: inflows positive, outflows negative
-      const sums = new Map();
+      // Two-level aggregation:
+      //   sums:    base_case_row → month_key → amount  (top-level totals)
+      //   subSums: base_case_row → cashbook_category → month_key → amount
+      const sums    = new Map();
+      const subSums = new Map();
       for (const r of all) {
         const mKey = monthMap.get(r.month_id);
         if (!mKey || !r.base_case_row) continue;
+        const amt = Number(r.signed_amount || 0);
+        // top-level
         if (!sums.has(r.base_case_row)) sums.set(r.base_case_row, new Map());
         const byMonth = sums.get(r.base_case_row);
-        byMonth.set(mKey, (byMonth.get(mKey) || 0) + Number(r.signed_amount || 0));
+        byMonth.set(mKey, (byMonth.get(mKey) || 0) + amt);
+        // sub-level
+        if (!subSums.has(r.base_case_row)) subSums.set(r.base_case_row, new Map());
+        const catMap = subSums.get(r.base_case_row);
+        const cat = r.cashbook_category || "Uncategorised";
+        if (!catMap.has(cat)) catMap.set(cat, new Map());
+        const catMonths = catMap.get(cat);
+        catMonths.set(mKey, (catMonths.get(mKey) || 0) + amt);
       }
 
       // Sort months chronologically
@@ -1253,9 +1265,21 @@
         .filter((row) => sums.has(row))
         .map((row) => {
           const byMonth = sums.get(row);
-          return { row, byMonth, total: sortedKeys.reduce((s, k) => s + (byMonth.get(k) || 0), 0) };
+          const total   = sortedKeys.reduce((s, k) => s + (byMonth.get(k) || 0), 0);
+          // Build sub-rows sorted by absolute total descending
+          const catMap = subSums.get(row) || new Map();
+          const subRows = [...catMap.entries()]
+            .map(([cat, catMonths]) => ({
+              cat,
+              byMonth: catMonths,
+              total: sortedKeys.reduce((s, k) => s + (catMonths.get(k) || 0), 0)
+            }))
+            .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+          return { row, byMonth, total, subRows };
         });
 
+      // Reset collapsed state to all-expanded when new report generated
+      state.multiCollapsed = new Set();
       state.multiReport = { rows: reportRows, keys: sortedKeys };
       renderMultiReportTable();
       const hint = $("multiReportHint");
@@ -1278,61 +1302,107 @@
     if (!rows.length) { tbl.innerHTML = ""; if (meta) meta.textContent = ""; return; }
     if (meta) meta.textContent = `${rows.length} rows · ${keys.length} month(s)`;
 
-    const thHtml = ["Base Case Row", ...keys, "Total US$'000"].map((h) => `<th>${esc(h)}</th>`).join("");
+    const colCount = keys.length + 2; // label + months + total
+    const thHtml = ["Base Case Row / Category", ...keys, "Total US$'000"].map((h) => `<th>${esc(h)}</th>`).join("");
 
-    const colorCell = (v) => {
-      const formatted = money(v / 1000);
-      const color = v < 0 ? "color:var(--red)" : "";
-      return `<td class="num" style="${color}">${formatted}</td>`;
+    const colorCell = (v, bold) => {
+      const style = [
+        v < 0 ? "color:var(--red)" : "",
+        bold ? "font-weight:700" : ""
+      ].filter(Boolean).join(";");
+      return `<td class="num" style="${style}">${money(v / 1000)}</td>`;
     };
 
-    const bodyHtml = rows.map((r) => {
-      const cells = [
-        `<td>${esc(r.row)}</td>`,
-        ...keys.map((k) => colorCell(r.byMonth.get(k) || 0)),
-        `<td class="num" style="font-weight:700;${r.total < 0 ? "color:var(--red)" : ""}">${money(r.total / 1000)}</td>`
-      ].join("");
-      return `<tr>${cells}</tr>`;
-    }).join("");
+    const bodyRows = [];
+    for (const r of rows) {
+      const collapsed = state.multiCollapsed.has(r.row);
+      const hasSubRows = r.subRows && r.subRows.length > 0;
+      const toggleIcon = hasSubRows ? (collapsed ? "▶" : "▼") : "·";
+      const toggleAttr = hasSubRows ? `data-toggle="${esc(r.row)}" style="cursor:pointer;user-select:none"` : "";
 
-    // Net cash flow row (signed sum across all rows)
+      // Header row (base_case_row level)
+      bodyRows.push(`<tr ${toggleAttr} style="background:#edf3f8;font-weight:600">
+        <td style="padding-left:8px">${hasSubRows ? `<span class="mr-toggle" style="font-size:10px;margin-right:6px;color:var(--muted)">${toggleIcon}</span>` : `<span style="display:inline-block;width:16px"></span>`}${esc(r.row)}</td>
+        ${keys.map((k) => colorCell(r.byMonth.get(k) || 0, true)).join("")}
+        ${colorCell(r.total, true)}
+      </tr>`);
+
+      // Sub-rows (cashbook_category level)
+      if (hasSubRows && !collapsed) {
+        for (const sr of r.subRows) {
+          bodyRows.push(`<tr style="background:#fff">
+            <td style="padding-left:32px;color:var(--muted);font-size:12px">${esc(sr.cat)}</td>
+            ${keys.map((k) => colorCell(sr.byMonth.get(k) || 0, false)).join("")}
+            ${colorCell(sr.total, false)}
+          </tr>`);
+        }
+      }
+    }
+
+    // Net cash flow row (signed sum across all top-level rows)
     const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
     const grandTotal = colTotals.reduce((a, b) => a + b, 0);
     const netColor = grandTotal < 0 ? "color:var(--red)" : "color:var(--teal)";
-    const totalRow = `<tr style="background:#edf3f8;font-weight:700;border-top:2px solid #c9d8e8">
+    const totalRow = `<tr style="background:#dbeafe;font-weight:700;border-top:2px solid #93c5fd">
       <td style="color:var(--navy)">NET CASH FLOW</td>
       ${colTotals.map((t) => `<td class="num" style="${t < 0 ? "color:var(--red)" : "color:var(--teal)"}">${money(t / 1000)}</td>`).join("")}
       <td class="num" style="${netColor}">${money(grandTotal / 1000)}</td>
     </tr>`;
 
-    tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}${totalRow}</tbody>`;
+    tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyRows.join("")}${totalRow}</tbody>`;
+
+    // Toggle click handler — re-delegate each render
+    tbl.onclick = (e) => {
+      const tr = e.target.closest("tr[data-toggle]");
+      if (!tr) return;
+      const rowName = tr.dataset.toggle;
+      if (state.multiCollapsed.has(rowName)) state.multiCollapsed.delete(rowName);
+      else state.multiCollapsed.add(rowName);
+      renderMultiReportTable();
+    };
+  }
+
+  function collapseAllMulti() {
+    const { rows } = state.multiReport || { rows: [] };
+    rows.forEach((r) => { if (r.subRows && r.subRows.length) state.multiCollapsed.add(r.row); });
+    renderMultiReportTable();
+  }
+
+  function expandAllMulti() {
+    state.multiCollapsed.clear();
+    renderMultiReportTable();
   }
 
   function exportMultiMonthReport() {
     const { rows, keys } = state.multiReport || { rows: [], keys: [] };
     if (!rows.length) return;
 
-    const headers = ["Base Case Row", ...keys.map((k) => `US$'000 — ${k}`), "Total US$'000"];
+    const headers = ["Base Case Row / Category", ...keys.map((k) => `US$'000 — ${k}`), "Total US$'000"];
     const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
     const grandTotal = colTotals.reduce((a, b) => a + b, 0);
 
-    const dataRows = [
-      ...rows.map((r) => [
-        r.row,
-        ...keys.map((k) => ((r.byMonth.get(k) || 0) / 1000).toFixed(1)),
-        (r.total / 1000).toFixed(1)
-      ]),
-      ["NET CASH FLOW", ...colTotals.map((t) => (t / 1000).toFixed(1)), (grandTotal / 1000).toFixed(1)]
-    ];
+    // Build flat data: header row + sub-rows + net total
+    const dataRows = [];
+    for (const r of rows) {
+      dataRows.push({ label: r.row, vals: keys.map((k) => (r.byMonth.get(k) || 0) / 1000), total: r.total / 1000, level: "main" });
+      for (const sr of (r.subRows || [])) {
+        dataRows.push({ label: "  " + sr.cat, vals: keys.map((k) => (sr.byMonth.get(k) || 0) / 1000), total: sr.total / 1000, level: "sub" });
+      }
+    }
+    dataRows.push({ label: "NET CASH FLOW", vals: colTotals.map((t) => t / 1000), total: grandTotal / 1000, level: "total" });
 
     const thHtml = headers.map((h) => `<th>${h}</th>`).join("");
-    const bodyHtml = dataRows.map((r, i) => {
-      const isTotal = i === dataRows.length - 1;
-      const style = isTotal ? ' style="font-weight:bold;background:#dbeafe"' : "";
-      const cells = r.map((c, ci) => {
-        const align = ci > 0 ? ' style="text-align:right"' : "";
-        return `<td${align}>${c}</td>`;
-      }).join("");
+    const bodyHtml = dataRows.map((r) => {
+      const style = r.level === "total"
+        ? ' style="font-weight:bold;background:#dbeafe"'
+        : r.level === "main"
+        ? ' style="font-weight:600;background:#edf3f8"'
+        : ' style="color:#5e6875"';
+      const cells = [
+        `<td>${r.label}</td>`,
+        ...r.vals.map((v) => `<td style="text-align:right">${v.toFixed(1)}</td>`),
+        `<td style="text-align:right;font-weight:${r.level !== "sub" ? "700" : "normal"}">${r.total.toFixed(1)}</td>`
+      ].join("");
       return `<tr${style}>${cells}</tr>`;
     }).join("");
 
@@ -1518,8 +1588,10 @@
         if (tr) selectBaseRow(parseInt(tr.dataset.bidx, 10));
       });
     }
-    if ($("generateMultiBtn")) $("generateMultiBtn").addEventListener("click", generateMultiMonthReport);
-    if ($("exportMultiBtn"))   $("exportMultiBtn").addEventListener("click", exportMultiMonthReport);
+    if ($("generateMultiBtn"))  $("generateMultiBtn").addEventListener("click", generateMultiMonthReport);
+    if ($("exportMultiBtn"))    $("exportMultiBtn").addEventListener("click", exportMultiMonthReport);
+    if ($("collapseAllBtn"))    $("collapseAllBtn").addEventListener("click", collapseAllMulti);
+    if ($("expandAllBtn"))      $("expandAllBtn").addEventListener("click", expandAllMulti);
     if ($("selectAllMonthsBtn")) $("selectAllMonthsBtn").addEventListener("click", () => {
       document.querySelectorAll(".month-checkbox").forEach((c) => { c.checked = true; c.closest("label").classList.add("selected"); });
     });
