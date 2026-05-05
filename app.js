@@ -522,25 +522,35 @@
       .slice(0, 500);
 
     table("exceptionsTable", [
-      { label: "Map", key: "record_key", render: (r) => `<button onclick="window.cashflowApp.prefillRule('${esc(r.record_key)}')">Map</button>` },
-      { label: "Issue", key: "record_key", render: (r) => { const t = excType(r); return t === "unmapped" ? '<span class="exc-badge unmapped">Unmapped</span>' : '<span class="exc-badge norow">No base row</span>'; } },
-      { label: "Source", key: "data_source" },
-      { label: "Category", key: "cashbook_category" },
-      { label: "Base Row", key: "base_case_row", render: (r) => r.base_case_row ? esc(r.base_case_row) : '<span class="bad">—</span>' },
-      { label: "Vendor", key: "vendor" },
-      { label: "Pay Group", key: "pay_group" },
-      { label: "FPC", key: "fpc" },
-      { label: "CC", key: "cc" },
-      { label: "Cost Item", key: "cost_item" },
-      { label: "Invoice #", key: "invoice_no" },
-      { label: "Inv Date", key: "invoice_date" },
-      { label: "Check #", key: "check_no" },
+      { label: "Map",        key: "record_key", render: (r) => `<button onclick="window.cashflowApp.prefillRule('${esc(r.record_key)}')">Map</button>` },
+      { label: "Issue",      key: "record_key", render: (r) => { const t = excType(r); return t === "unmapped" ? '<span class="exc-badge unmapped">Unmapped</span>' : '<span class="exc-badge norow">No base row</span>'; } },
+      { label: "Source",     key: "data_source" },
+      { label: "Category",   key: "cashbook_category" },
+      { label: "Base Row",   key: "base_case_row", render: (r) => r.base_case_row ? esc(r.base_case_row) : '<span class="bad">—</span>' },
+      { label: "Vendor",     key: "vendor" },
+      { label: "Vendor #",   key: "vendor_no" },
+      { label: "Pay Group",  key: "pay_group" },
+      { label: "FPC",        key: "fpc" },
+      { label: "CC",         key: "cc" },
+      { label: "Job #",      key: "jobno" },
+      { label: "Cost Item",  key: "cost_item" },
+      { label: "Emp #",      key: "emp_no" },
+      { label: "Op Unit",    key: "operating_unit" },
+      { label: "Invoice #",  key: "invoice_no" },
+      { label: "Inv Date",   key: "invoice_date" },
+      { label: "Acct Date",  key: "acct_date" },
+      { label: "Voucher #",  key: "voucher_number" },
+      { label: "Check #",    key: "check_no" },
       { label: "Check Date", key: "check_date" },
-      { label: "PO #", key: "po_no" },
-      { label: "Description", key: "description" },
-      { label: "Amount (USD)", key: "amount", num: true, render: (r) => money(r.amount) },
-      { label: "Orig Amount", key: "amount_original", num: true, render: (r) => r.amount_original ? money(r.amount_original) : "" },
-      { label: "Currency", key: "currency" }
+      { label: "PO #",       key: "po_no" },
+      { label: "Bank Acct",  key: "bank_account" },
+      { label: "Line #",     key: "line_no" },
+      { label: "Description",key: "description" },
+      { label: "Amount USD", key: "amount", num: true, render: (r) => money(r.amount) },
+      { label: "Orig (JMD)", key: "amount_original", num: true, render: (r) => r.amount_original ? money(r.amount_original) : "" },
+      { label: "Amt Paid",   key: "amount_paid",   num: true, render: (r) => r.amount_paid   ? money(r.amount_paid)   : "" },
+      { label: "Currency",   key: "currency" },
+      { label: "Void",       key: "void_flag" }
     ], rows);
   }
 
@@ -561,7 +571,6 @@
       { label: "Category", key: "category" },
       { label: "Base Row", key: "base_case_row" },
       { label: "Applies To", key: "applies_to" },
-      { label: "Pay Group Filter", key: "paygroup_filter" },
       { label: "Active", key: "active", render: (r) => r.active ? "Yes" : '<span class="bad">No</span>' },
       { label: "Notes", key: "notes" },
       { label: "Delete", key: "rule_code", render: (r) => `<button class="danger" onclick="window.cashflowApp.deleteRule('${esc(r.rule_code)}')">Delete</button>` }
@@ -1451,7 +1460,16 @@
 
   function exportRecords() {
     if (!state.records.length) return;
-    const exportKeys = ["record_key","data_source","role","main_group","sub_group","vendor","pay_group","fpc","cost_item","description","amount","cashbook_category","base_case_row","mapped","mapping_rule","batch_name","je_name","account","debit_usd","credit_usd"];
+    const exportKeys = [
+      "record_key","data_source","role","main_group","sub_group",
+      "vendor","vendor_no","pay_group","fpc","cost_item",
+      "cc","jobno","emp_no","operating_unit",
+      "invoice_no","invoice_date","acct_date","voucher_number",
+      "check_no","check_date","po_no","bank_account","line_no",
+      "description","amount","amount_original","amount_paid","currency","void_flag",
+      "cashbook_category","base_case_row","mapped","mapping_rule",
+      "batch_name","je_name","account","debit_usd","credit_usd"
+    ];
     const rows = state.records.map((r) => Object.fromEntries(exportKeys.map((k) => [k, r[k] ?? ""])));
     download(`cashflow_records_${currentMonthKey() || "month"}.csv`, toCsv(rows), "text/csv");
   }
