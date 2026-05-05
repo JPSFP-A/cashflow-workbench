@@ -133,15 +133,13 @@
 
   function fixed(line, spans) { return spans.map(([s, e]) => line.slice(s, e).trim()); }
 
-  // Extract segments from Oracle GL account code e.g. "01.001.12345.10200.00000"
-  // Seg 1 = entity, Seg 2 = cost centre, Seg 3 = cost_item,
-  // Seg 4 = bank account number (confirmed by JPS), Seg 5 = FPC / project
+  // Extract segments from Oracle GL account code e.g. "01.001.12345.10200"
+  // Seg 1 = entity, Seg 2 = cost centre, Seg 3 = cost_item, Seg 4 = FPC / project
   function accountParts(account) {
     const p = String(account || "").split(".");
     return {
-      cost_item:    (p[2] || "").replace(/^0+/, "") || "0",  // segment 3
-      bank_account: p[3] ? p[3].padStart(5, "0") : "",        // segment 4 — always 5 chars
-      fpc:          (p[4] || "").replace(/^0+/, "") || ""    // segment 5
+      cost_item: (p[2] || "").replace(/^0+/, "") || "0",  // segment 3
+      fpc:       (p[3] || "").replace(/^0+/, "") || ""    // segment 4 = FPC
     };
   }
 
@@ -195,9 +193,8 @@
         amount:        debit_usd || credit_usd,
         signed_amount: debit_usd - credit_usd,
         vendor: "", pay_group: "",
-        fpc:          parts.fpc,
-        cost_item:    parts.cost_item,
-        bank_account: parts.bank_account  // segment 4 of GL account code
+        fpc:       parts.fpc,
+        cost_item: parts.cost_item
       });
     }
     return rows;
@@ -527,7 +524,6 @@
       { label: "CB Category",   key: "category_code",   render: (r) => r.category_code ? esc(r.category_code) : "" },
       { label: "Account",       key: "account",         render: (r) => r.account ? esc(r.account) : "" },
       { label: "Cost Item",     key: "cost_item",       render: (r) => r.cost_item ? esc(r.cost_item) : "" },
-      { label: "Bank Acct",     key: "bank_account",    render: (r) => r.bank_account ? esc(r.bank_account) : "" },
       { label: "FPC",           key: "fpc" },
       { label: "Vendor",        key: "vendor" },
       { label: "Pay Group",     key: "pay_group" },
