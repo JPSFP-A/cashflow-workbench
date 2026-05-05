@@ -728,18 +728,14 @@
     const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("rule_code");
     if (error) return setStatus(error.message, "error");
 
-    if (syncDefaults) {
-      // Insert any default rules that are missing from the DB.
-      // Uses rule_code as the key — never overwrites user edits to existing rules.
-      const existingCodes = new Set((data || []).map((r) => r.rule_code));
-      const missing = defaultRules.filter((r) => !existingCodes.has(r.rule_code));
-      if (missing.length) {
-        const rows = missing.map((r) => ({ ...r, created_by: "system (auto-sync)", updated_by: "system (auto-sync)" }));
-        const { error: insertErr } = await state.supabase.from("cashflow_rules").insert(rows);
-        if (insertErr) return setStatus(insertErr.message, "error");
-        await auditLog("sync_rules", null, null, `Auto-added ${missing.length} missing default rule(s): ${missing.map((r) => r.rule_code).join(", ")}`);
-        return loadRules(false); // reload with the new rules
-      }
+    if (syncDefaults && (!data || data.length === 0)) {
+      // Only seed defaults when the rules table is completely empty (first-time setup).
+      // Once any rules exist the user owns the list — deletions are permanent.
+      const rows = defaultRules.map((r) => ({ ...r, created_by: "system (initial-seed)", updated_by: "system (initial-seed)" }));
+      const { error: insertErr } = await state.supabase.from("cashflow_rules").insert(rows);
+      if (insertErr) return setStatus(insertErr.message, "error");
+      await auditLog("sync_rules", null, null, `Seeded ${rows.length} default rules (first-time setup)`);
+      return loadRules(false);
     }
 
     state.rules = data || [];
