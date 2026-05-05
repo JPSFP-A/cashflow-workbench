@@ -895,15 +895,17 @@
       if (error) throw error;
     }
     if (records.length) {
-      const chunkSize = 500;
+      const chunkSize = 1000;
       const total = records.length;
-      for (let i = 0; i < total; i += chunkSize) {
-        const saved = Math.min(i + chunkSize, total);
-        setStatus(`Saving records… ${saved.toLocaleString()} / ${total.toLocaleString()}`, "");
-        const chunk = records.slice(i, i + chunkSize).map((r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "", main_group: r.main_group || "", sub_group: r.sub_group || "", cc: r.cc || "", jobno: r.jobno || "", invoice_no: r.invoice_no || "", invoice_date: r.invoice_date || "", vendor_no: r.vendor_no || "", emp_no: r.emp_no || "", acct_date: r.acct_date || "", amount_original: r.amount_original ? num(r.amount_original) : null, voucher_number: r.voucher_number || "", po_no: r.po_no || "", operating_unit: r.operating_unit || "", bank_account: r.bank_account || "", check_no: r.check_no || "", check_date: r.check_date || "", amount_paid: r.amount_paid ? num(r.amount_paid) : null, void_flag: r.void || "", currency: r.currency || "", line_no: r.line_no || "" }));
-        const { error } = await state.supabase.from("cashflow_records").insert(chunk);
-        if (error) throw error;
-      }
+      setStatus(`Saving records… 0 / ${total.toLocaleString()}`, "");
+      const mapRow = (r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "", main_group: r.main_group || "", sub_group: r.sub_group || "", cc: r.cc || "", jobno: r.jobno || "", invoice_no: r.invoice_no || "", invoice_date: r.invoice_date || "", vendor_no: r.vendor_no || "", emp_no: r.emp_no || "", acct_date: r.acct_date || "", amount_original: r.amount_original ? num(r.amount_original) : null, voucher_number: r.voucher_number || "", po_no: r.po_no || "", operating_unit: r.operating_unit || "", bank_account: r.bank_account || "", check_no: r.check_no || "", check_date: r.check_date || "", amount_paid: r.amount_paid ? num(r.amount_paid) : null, void_flag: r.void || "", currency: r.currency || "", line_no: r.line_no || "" });
+      // Build chunks then fire all in parallel — dramatically faster than sequential awaits
+      const chunks = [];
+      for (let i = 0; i < total; i += chunkSize) chunks.push(records.slice(i, i + chunkSize).map(mapRow));
+      const results = await Promise.all(chunks.map((chunk) => state.supabase.from("cashflow_records").insert(chunk)));
+      const failed = results.find((r) => r.error);
+      if (failed) throw failed.error;
+      setStatus(`Saving records… ${total.toLocaleString()} / ${total.toLocaleString()}`, "");
     }
     await auditLog("process_month", monthKey, "", `Saved ${records.length} processed records`);
     state.loadedMonth = monthKey;

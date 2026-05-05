@@ -985,6 +985,7 @@
             <li>Switch to <b>Map Exceptions</b> to see unmapped lines or lines with no base case row. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b> to rebuild immediately.</li>
             <li>Use <b>↻ Reapply Rules</b> from the month panel at any time to re-run all rules against the saved source files without re-uploading.</li>
             <li>Use <b>📊 Multi-Month Report</b> to compare any combination of saved months side-by-side as a base case matrix, with expandable sub-group rows. Download as Excel.</li>
+            <li>When the month is finalised, go to the <b>Admin</b> tab and click <b>📨 Submit for Approval</b>. A 6-digit code is emailed to the configured approver. The approver enters the code to <b>lock the month</b>. A locked month shows 🔒 in the dropdown and cannot be reprocessed or have rules reapplied — protecting the final figures from accidental change.</li>
             <li>Export the single-month Base Case via <b>⬇ Excel Report</b> when the month is finalised.</li>
           </ol>
 
@@ -1036,14 +1037,32 @@
           <p>All rules are managed in the <b>⚙ Rules</b> tab. Rules run in priority order (lowest number first); first match wins. Use the ▲/▼ buttons to reorder. Specific multi-condition rules must sit above broad catch-alls.</p>
           <p class="hint">Run <b>↻ Reapply Rules</b> on each saved month after adding or changing rules to apply changes to historical data.</p>
 
+          <h2>Month Locking (Approval Workflow)</h2>
+          <p>Month locking is the period-close control for the cashflow model. Once a month is locked, its processed records are frozen — no reprocessing, no rule reapplication, no overwrite. This ensures that figures reported in management packs or submitted to finance cannot be silently changed after sign-off.</p>
+          <h3>How it works</h3>
+          <ol>
+            <li><b>Configure the approver</b> — Admin tab → Settings → set the Approver Email and From Email. This is a one-time setup.</li>
+            <li><b>Submit for approval</b> — Admin tab, find the month row, click <b>📨 Submit for Approval</b>. The edge function sends a 6-digit OTP to the approver email.</li>
+            <li><b>Approver enters the code</b> — a modal prompts for the 6 digits. On success, the month status is set to <code>approved</code> in the database.</li>
+            <li><b>Locked state</b> — the month shows 🔒 in the Saved Month dropdown and an <b>✓ Approved</b> chip in the Admin table. Process, Reapply, and overwrite are all blocked. Reset is still possible but triggers an extra confirmation warning and fires a notification email to the approver.</li>
+          </ol>
+          <h3>Why locking is needed</h3>
+          <ul>
+            <li><b>Auditability</b> — rules and source data can change over time. Locking freezes the processed output at the point of review so historical periods remain stable.</li>
+            <li><b>Segregation of duties</b> — the person who processes the month is different from the person who approves it. The OTP ensures the approver actively signs off, not just the preparer.</li>
+            <li><b>Integrity of management reporting</b> — multi-month reports pull locked months from the database. Without locking, a later rule change would silently alter a period that had already been reported.</li>
+          </ul>
+          <p class="hint">The approver email and OTP are handled by the Supabase Edge Function <code>cashflow-approval</code>. Configure <b>RESEND_API_KEY</b> in the Edge Function environment for email delivery.</p>
+
           <h2>Notes</h2>
           <ul>
             <li>Cashbook debits are the receipt side (Collections). Cashbook credits are the bank control side only and are excluded from the Base Case.</li>
             <li>AP invoice/payment report is the primary source for classifying outflows.</li>
             <li>Records with no base case row (transfers, bank charges) are excluded from all Base Case and Multi-Month summaries.</li>
-            <li>Reset / Wipe removes all records and uploads for the month. You will need to re-upload source files to reprocess after a reset.</li>
+            <li>Reset / Wipe removes all records and uploads for the month. You will need to re-upload source files to reprocess after a reset. If the month is locked, resetting sends a notification email to the approver and requires an extra confirmation.</li>
             <li>No password is required. Your name from the welcome screen is stamped on every save, rule change, and audit log entry.</li>
             <li>The Multi-Month Report queries the database directly — no need to have a month loaded first.</li>
+            <li>Rule order matters — first match wins. More specific multi-condition rules must appear above broad single-condition fallbacks. Use ▲/▼ in the Rules tab to reorder.</li>
           </ul>
         </div>
       </div>
