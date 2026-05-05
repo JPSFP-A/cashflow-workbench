@@ -97,11 +97,24 @@
 
   function fixed(line, spans) { return spans.map(([s, e]) => line.slice(s, e).trim()); }
 
+  // Extract segments from Oracle GL account code  e.g. "01.1010.001.12345.00000"
+  // Seg 0 = entity, Seg 1 = natural acct / bank acct, Seg 2 = cost centre / cost_item,
+  // Seg 3 = FPC / project, Seg 4 = future/interco
   function accountParts(account) {
     const p = String(account || "").split(".");
-    return { cost_item: (p[2] || "").replace(/^0+/, "") || "0", fpc: (p[3] || p[4] || "").slice(0, 5).replace(/^0+/, "") || (p[3] || "") };
+    return {
+      bank_account: p[1] || "",                                                            // segment 2
+      cost_item:    (p[2] || "").replace(/^0+/, "") || "0",                                // segment 3
+      fpc:          (p[3] || p[4] || "").slice(0, 5).replace(/^0+/, "") || (p[3] || "")   // segment 4/5
+    };
   }
 
+  // Cashbook fixed-width parser — handles 7 to 12+ column formats.
+  // The dash-separator line defines column spans dynamically, so we never hard-code positions.
+  // Column layout (left→right): source | category | batch | je_name | account |
+  //   [description] | [entry_item] | [extra cols…] | debit | credit
+  // Last two numeric cols are always debit / credit; everything between account and
+  // debit is description / entry_item / reference fields.
   function parseCashbook(text, name) {
     let spans = null;
     const rows = [];
@@ -109,15 +122,52 @@
       const line = raw.replace(/\f/g, "");
       if (line.startsWith("----------")) { spans = [...line.matchAll(/-+/g)].map((m) => [m.index, m.index + m[0].length]); continue; }
       if (!spans || !line.trim() || line.startsWith("Source") || /JPSCO Ledger|Report Date:|Page:|Period:|Currency:|Accounts From:|Balance Type:|Total for Period|Beginning Balance|Ending Balance/.test(line)) continue;
-      const vals = fixed(line.padEnd(180), spans);
-      let source, category_code, batch_name, je_name, account, description, entry_item, debit, credit;
-      if (vals.length === 8) { [source, category_code, batch_name, je_name, account, description, debit, credit] = vals; entry_item = ""; }
-      else if (vals.length === 9) { [source, category_code, batch_name, je_name, account, description, entry_item, debit, credit] = vals; }
-      else continue;
+      const vals = fixed(line.padEnd(Math.max(180, spans[spans.length - 1]?.[1] || 0)), spans);
+      const n = vals.length;
+      if (n < 7) continue; // minimum: source, category, batch, je, account, debit, credit
+
+      // Always: first 5 cols = source..account; last 2 = debit/credit
+      const source        = vals[0];
+      const category_code = vals[1];
+      const batch_name    = vals[2];
+      const je_name       = vals[3];
+      const account       = vals[4];
+      const debit         = vals[n - 2];
+      const credit        = vals[n - 1];
+
+      // Middle columns between account (idx 4) and debit (idx n-2)
+      const mid           = vals.slice(5, n - 2);  // 0..many extra cols
+      const description   = mid[0] || "";
+      const entry_item    = mid[1] || "";
+      // Any further mid columns treated as additional reference fields
+      const extra         = mid.slice(2);           // [ref1, ref2, …]
+
       const debit_usd = num(debit); const credit_usd = num(credit);
       if (!source || (!debit_usd && !credit_usd)) continue;
       const parts = accountParts(account);
-      rows.push({ record_key: `${name}-${rows.length + 1}`, data_source: "Cashbook", source_file: name, role: debit_usd ? "Inflow" : "Cashbook Credit", source, category_code, batch_name, je_name, account, description, entry_item, debit_usd, credit_usd, amount: debit_usd || credit_usd, signed_amount: debit_usd - credit_usd, vendor: "", pay_group: "", fpc: parts.fpc, cost_item: parts.cost_item });
+
+      // bank_account: prefer an explicit column in extra[] that looks like an account code,
+      // otherwise fall back to the GL natural-account segment.
+      const explicitBankAcct = extra.find((v) => /^\d{4,}/.test(v)) || "";
+
+      rows.push({
+        record_key:    `${name}-${rows.length + 1}`,
+        data_source:   "Cashbook",
+        source_file:   name,
+        role:          debit_usd ? "Inflow" : "Cashbook Credit",
+        source, category_code, batch_name, je_name, account,
+        description, entry_item,
+        debit_usd, credit_usd,
+        amount:        debit_usd || credit_usd,
+        signed_amount: debit_usd - credit_usd,
+        vendor: "", pay_group: "",
+        fpc:          parts.fpc,
+        cost_item:    parts.cost_item,
+        bank_account: explicitBankAcct || parts.bank_account || "",
+        // Preserve all extra reference fields in entry_item if only one exists,
+        // otherwise join them so nothing is silently dropped
+        ...(extra.length > 1 ? { entry_item: [entry_item, ...extra].filter(Boolean).join(" | ") } : {})
+      });
     }
     return rows;
   }
@@ -146,7 +196,12 @@
       acctCounts.set(k, n + 1);
       const desc = descByKey.get(`${k}#${n}`);
       if (!desc) return row;
-      return { ...row, description: desc.description || row.description, entry_item: row.entry_item || desc.entry_item || "" };
+      return {
+        ...row,
+        description:  desc.description  || row.description,
+        entry_item:   row.entry_item    || desc.entry_item    || "",
+        bank_account: row.bank_account  || desc.bank_account  || "",
+      };
     });
   }
 
