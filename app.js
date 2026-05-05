@@ -216,22 +216,42 @@
     return parts.length === 2 && !parts.some(Number.isNaN) ? v >= parts[0] && v <= parts[1] : false;
   }
 
+  // Evaluate a single condition (type + value) against a record row.
+  // Returns true when type/value are empty (condition not set = always passes).
+  function matchSingle(type, value, row) {
+    if (!type || !value) return true;
+    const match = norm(value);
+    switch (type) {
+      case "vendor_contains":      return norm(row.vendor).includes(match);
+      case "paygroup_contains":    return norm(row.pay_group).includes(match);
+      case "paygroup_equals":      return norm(row.pay_group) === match;
+      case "fpc_equals":           return norm(row.fpc) === match;
+      case "fpc_prefix":           return norm(row.fpc).startsWith(match);
+      case "fpc_range":            return inRange(row.fpc, value);
+      case "description_contains": return norm([row.description, row.category_code, row.je_name, row.batch_name].join(" ")).includes(match);
+      case "cashbook_cost_range":  return inRange(row.cost_item, value);
+      case "jobno_range":          return inRange(row.jobno, value);
+      case "jobno_equals":         return norm(row.jobno) === match;
+      case "cc_equals":            return norm(row.cc) === match;
+      case "emp_no_equals":        return norm(row.emp_no) === match;
+      case "vendor_no_equals":     return norm(row.vendor_no) === match;
+      default:                     return true;
+    }
+  }
+
   function ruleApplies(rule, row) {
+    // Source scope filter
     const applies = norm(rule.applies_to || "all");
-    if (applies === "AP" && row.data_source !== "Invoice Payments") return false;
-    if (applies === "CASHBOOK" && row.data_source !== "Cashbook") return false;
-    if (applies === "CASHBOOK_DEBIT" && row.role !== "Inflow") return false;
-    if (applies === "CASHBOOK_CREDIT" && row.role !== "Cashbook Credit") return false;
+    if (applies === "AP"             && row.data_source !== "Invoice Payments") return false;
+    if (applies === "CASHBOOK"       && row.data_source !== "Cashbook")         return false;
+    if (applies === "CASHBOOK_DEBIT" && row.role !== "Inflow")                  return false;
+    if (applies === "CASHBOOK_CREDIT"&& row.role !== "Cashbook Credit")         return false;
+    // Legacy pay-group pre-filter (still honoured on existing rules)
     if (rule.paygroup_filter && !norm(row.pay_group).includes(norm(rule.paygroup_filter))) return false;
-    const match = norm(rule.match_value);
-    if (rule.rule_type === "vendor_contains") return norm(row.vendor).includes(match);
-    if (rule.rule_type === "paygroup_contains") return norm(row.pay_group).includes(match);
-    if (rule.rule_type === "fpc_equals") return norm(row.fpc) === match;
-    if (rule.rule_type === "fpc_prefix") return norm(row.fpc).startsWith(match);
-    if (rule.rule_type === "fpc_range") return inRange(row.fpc, rule.match_value);
-    if (rule.rule_type === "description_contains") return norm([row.description, row.category_code, row.je_name, row.batch_name].join(" ")).includes(match);
-    if (rule.rule_type === "cashbook_cost_range") return inRange(row.cost_item, rule.match_value);
-    return false;
+    // Primary condition AND optional conditions 2 and 3 (all must pass)
+    return matchSingle(rule.rule_type,  rule.match_value,  row)
+        && matchSingle(rule.cond2_type, rule.cond2_value,  row)
+        && matchSingle(rule.cond3_type, rule.cond3_value,  row);
   }
 
   function baseRowFor(row) {
@@ -561,19 +581,38 @@
       : state.rules;
     const rulesCount = $("rulesCount");
     if (rulesCount) rulesCount.textContent = q ? `${filtered.length} of ${state.rules.length} rules` : `${state.rules.length} rules`;
+    // Build a readable "Conditions" summary cell
+    const condLabel = (type, value) => {
+      if (!type || !value) return "";
+      const labels = {
+        vendor_contains: "Vendor∋", paygroup_contains: "PayGrp∋", paygroup_equals: "PayGrp=",
+        fpc_equals: "FPC=", fpc_prefix: "FPC^", fpc_range: "FPC∈",
+        description_contains: "Desc∋", cashbook_cost_range: "CI∈",
+        jobno_range: "Job∈", jobno_equals: "Job=",
+        cc_equals: "CC=", emp_no_equals: "Emp=", vendor_no_equals: "VndNo="
+      };
+      return `${labels[type] || type} ${value}`;
+    };
     table("rulesTable", [
-      { label: "Edit", key: "rule_code", render: (r) => `<button onclick="window.cashflowApp.loadRule('${esc(r.rule_code)}')">Edit</button>` },
-      { label: "Code", key: "rule_code" },
+      { label: "Edit",       key: "rule_code",   render: (r) => `<button onclick="window.cashflowApp.loadRule('${esc(r.rule_code)}')">Edit</button>` },
+      { label: "Code",       key: "rule_code" },
       { label: "Main Group", key: "main_group" },
-      { label: "Sub Group", key: "sub_group" },
-      { label: "Type", key: "rule_type" },
-      { label: "Match", key: "match_value" },
-      { label: "Category", key: "category" },
-      { label: "Base Row", key: "base_case_row" },
+      { label: "Sub Group",  key: "sub_group" },
+      { label: "Conditions", key: "rule_code",   render: (r) => {
+          const parts = [
+            condLabel(r.rule_type,  r.match_value),
+            condLabel(r.cond2_type, r.cond2_value),
+            condLabel(r.cond3_type, r.cond3_value)
+          ].filter(Boolean);
+          return parts.map((p, i) => i === 0 ? esc(p) : `<span style="color:var(--muted)"> AND </span>${esc(p)}`).join("");
+        }
+      },
+      { label: "Category",   key: "category" },
+      { label: "Base Row",   key: "base_case_row" },
       { label: "Applies To", key: "applies_to" },
-      { label: "Active", key: "active", render: (r) => r.active ? "Yes" : '<span class="bad">No</span>' },
-      { label: "Notes", key: "notes" },
-      { label: "Delete", key: "rule_code", render: (r) => `<button class="danger" onclick="window.cashflowApp.deleteRule('${esc(r.rule_code)}')">Delete</button>` }
+      { label: "Active",     key: "active",      render: (r) => r.active ? "Yes" : '<span class="bad">No</span>' },
+      { label: "Notes",      key: "notes" },
+      { label: "Delete",     key: "rule_code",   render: (r) => `<button class="danger" onclick="window.cashflowApp.deleteRule('${esc(r.rule_code)}')">Delete</button>` }
     ], filtered);
   }
 
@@ -1150,6 +1189,10 @@
     $("notesValue").value = rule.notes || "";
     if ($("mainGroupValue")) $("mainGroupValue").value = rule.main_group || "";
     if ($("subGroupValue"))  $("subGroupValue").value  = rule.sub_group  || "";
+    if ($("cond2Type"))  $("cond2Type").value  = rule.cond2_type  || "";
+    if ($("cond2Value")) $("cond2Value").value = rule.cond2_value || "";
+    if ($("cond3Type"))  $("cond3Type").value  = rule.cond3_type  || "";
+    if ($("cond3Value")) $("cond3Value").value = rule.cond3_value || "";
     const subGroupRow = $("subGroupRow");
     if (subGroupRow) subGroupRow.style.display = rule.applies_to === "ap" ? "none" : "";
     document.querySelector('.tab-btn[data-tab="exceptions"]').click();
@@ -1157,8 +1200,11 @@
   }
 
   function clearRule() {
-    ["ruleCodeValue", "matchValue", "categoryValue", "notesValue", "subGroupValue"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
+    ["ruleCodeValue", "matchValue", "categoryValue", "notesValue", "subGroupValue",
+     "cond2Value", "cond3Value"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
     if ($("mainGroupValue")) $("mainGroupValue").value = "";
+    if ($("cond2Type"))  $("cond2Type").value  = "";
+    if ($("cond3Type"))  $("cond3Type").value  = "";
     $("baseRowValue").value = "";
     $("appliesTo").value = "ap";
     $("ruleType").value = "vendor_contains";
@@ -1170,16 +1216,20 @@
   async function saveRule() {
     const code = $("ruleCodeValue").value.trim();
     const rule = {
-      rule_code: code || nextRuleCode(),
-      rule_type: $("ruleType").value,
+      rule_code:   code || nextRuleCode(),
+      rule_type:   $("ruleType").value,
       match_value: $("matchValue").value.trim(),
-      category: $("categoryValue").value.trim(),
-      base_case_row: $("baseRowValue").value,
-      applies_to: $("appliesTo").value,
+      cond2_type:  ($("cond2Type")  ? $("cond2Type").value.trim()  : "") || null,
+      cond2_value: ($("cond2Value") ? $("cond2Value").value.trim() : "") || null,
+      cond3_type:  ($("cond3Type")  ? $("cond3Type").value.trim()  : "") || null,
+      cond3_value: ($("cond3Value") ? $("cond3Value").value.trim() : "") || null,
+      category:     $("categoryValue").value.trim(),
+      base_case_row:$("baseRowValue").value,
+      applies_to:   $("appliesTo").value,
       paygroup_filter: "",
-      notes: $("notesValue").value.trim(),
-      main_group: ($("mainGroupValue") ? $("mainGroupValue").value.trim() : ""),
-      sub_group:  ($("subGroupValue")  ? $("subGroupValue").value.trim()  : ""),
+      notes:       $("notesValue").value.trim(),
+      main_group:  ($("mainGroupValue") ? $("mainGroupValue").value.trim() : ""),
+      sub_group:   ($("subGroupValue")  ? $("subGroupValue").value.trim()  : ""),
       active: true,
       created_by: userName(),
       updated_by: userName()
@@ -1598,7 +1648,7 @@
 
     // Dirty indicator — show "Unsaved changes" when the rule form is modified
     const ruleDirtyHint = $("ruleDirtyHint");
-    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","categoryValue","baseRowValue","appliesTo","notesValue","mainGroupValue","subGroupValue"];
+    const ruleFormFields = ["ruleCodeValue","ruleType","matchValue","cond2Type","cond2Value","cond3Type","cond3Value","categoryValue","baseRowValue","appliesTo","notesValue","mainGroupValue","subGroupValue"];
     const markDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = ""; };
     const clearDirty = () => { if (ruleDirtyHint) ruleDirtyHint.style.display = "none"; };
     ruleFormFields.forEach((id) => {

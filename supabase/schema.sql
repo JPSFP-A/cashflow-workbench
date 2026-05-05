@@ -31,6 +31,11 @@ create table if not exists public.cashflow_rules (
   base_case_row text,
   applies_to text not null default 'ap',
   paygroup_filter text,
+  -- Multi-condition AND logic: cond2/cond3 optional, empty = always passes
+  cond2_type  text,
+  cond2_value text,
+  cond3_type  text,
+  cond3_value text,
   notes text,
   active boolean not null default true,
   created_by text,             -- name of the creator

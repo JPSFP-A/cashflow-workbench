@@ -717,20 +717,70 @@
                   <input id="ruleCodeValue" placeholder="Auto-generated for new rules">
                 </div>
                 <div class="form-field">
-                  <label>Rule type</label>
+                  <label>Condition 1 — type</label>
                   <select id="ruleType">
                     <option value="vendor_contains">Vendor contains</option>
                     <option value="paygroup_contains">Pay group contains</option>
+                    <option value="paygroup_equals">Pay group equals</option>
                     <option value="fpc_equals">FPC equals</option>
                     <option value="fpc_prefix">FPC starts with</option>
-                    <option value="fpc_range">FPC range</option>
+                    <option value="fpc_range">FPC range (e.g. 30000-39999)</option>
+                    <option value="jobno_range">Job # range (e.g. 1000-2000)</option>
+                    <option value="jobno_equals">Job # equals</option>
+                    <option value="cc_equals">CC equals</option>
+                    <option value="emp_no_equals">Employee # equals</option>
+                    <option value="vendor_no_equals">Vendor # equals</option>
                     <option value="description_contains">Description contains</option>
                     <option value="cashbook_cost_range">Cashbook cost item range</option>
                   </select>
                 </div>
                 <div class="form-field">
-                  <label>Match value</label>
+                  <label>Condition 1 — value</label>
                   <input id="matchValue" placeholder="e.g. JAMECO, 16501, 30000-39999">
+                </div>
+                <div class="form-field">
+                  <label>Condition 2 <span class="hint" style="font-weight:400">AND (optional)</span></label>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <select id="cond2Type" style="flex:0 0 200px">
+                      <option value="">— none —</option>
+                      <option value="vendor_contains">Vendor contains</option>
+                      <option value="paygroup_contains">Pay group contains</option>
+                      <option value="paygroup_equals">Pay group equals</option>
+                      <option value="fpc_equals">FPC equals</option>
+                      <option value="fpc_prefix">FPC starts with</option>
+                      <option value="fpc_range">FPC range</option>
+                      <option value="jobno_range">Job # range</option>
+                      <option value="jobno_equals">Job # equals</option>
+                      <option value="cc_equals">CC equals</option>
+                      <option value="emp_no_equals">Employee # equals</option>
+                      <option value="vendor_no_equals">Vendor # equals</option>
+                      <option value="description_contains">Description contains</option>
+                      <option value="cashbook_cost_range">Cost item range</option>
+                    </select>
+                    <input id="cond2Value" placeholder="value" style="flex:1;min-width:0">
+                  </div>
+                </div>
+                <div class="form-field">
+                  <label>Condition 3 <span class="hint" style="font-weight:400">AND (optional)</span></label>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <select id="cond3Type" style="flex:0 0 200px">
+                      <option value="">— none —</option>
+                      <option value="vendor_contains">Vendor contains</option>
+                      <option value="paygroup_contains">Pay group contains</option>
+                      <option value="paygroup_equals">Pay group equals</option>
+                      <option value="fpc_equals">FPC equals</option>
+                      <option value="fpc_prefix">FPC starts with</option>
+                      <option value="fpc_range">FPC range</option>
+                      <option value="jobno_range">Job # range</option>
+                      <option value="jobno_equals">Job # equals</option>
+                      <option value="cc_equals">CC equals</option>
+                      <option value="emp_no_equals">Employee # equals</option>
+                      <option value="vendor_no_equals">Vendor # equals</option>
+                      <option value="description_contains">Description contains</option>
+                      <option value="cashbook_cost_range">Cost item range</option>
+                    </select>
+                    <input id="cond3Value" placeholder="value" style="flex:1;min-width:0">
+                  </div>
                 </div>
                 <div class="form-field">
                   <label>Category</label>
@@ -960,7 +1010,8 @@
 
           <h2>Rule Form Fields</h2>
           <ul>
-            <li><b>Rule type / Match value:</b> What the rule matches — vendor name, pay group text, FPC code, description keyword, or cashbook cost item range.</li>
+            <li><b>Condition 1 (required):</b> The primary match — vendor name, pay group, FPC, Job #, CC, Emp #, Vendor #, description keyword, or cost item range.</li>
+            <li><b>Condition 2 / Condition 3 (optional):</b> Additional AND conditions. All conditions must be true for the rule to match. Example: Pay group = SUPPLIER <em>AND</em> Job # range 1000-2000 <em>AND</em> Vendor contains ACME. Leave type blank to skip.</li>
             <li><b>Category:</b> The granular label written onto each matched record (becomes <em>cashbook_category</em>).</li>
             <li><b>Base Case Row:</b> The model reporting line the record maps to.</li>
             <li><b>Applies to:</b> Which source records the rule targets — AP outflows, cashbook debits, cashbook credits, or all.</li>
@@ -968,6 +1019,7 @@
             <li><b>Sub Group:</b> <em>Cashbook rules only.</em> AP records use pay group (from Oracle) automatically — no sub group needed on AP rules.</li>
             <li><b>Notes:</b> Free-text reference for the procedure or rationale.</li>
           </ul>
+          <p class="hint">Rule order matters — first match wins. More specific multi-condition rules must appear above broad single-condition fallbacks (e.g. RULE-0023 Supplier catch-all).</p>
 
           <h2>AP Rules — 47 rules (updated 27 Apr 2026)</h2>
           <p>Rules run top-to-bottom; first match wins. More specific rules must appear before broad pay group fallbacks.</p>
