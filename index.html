@@ -634,11 +634,11 @@
           <div class="workspace-card-body">
             <!-- Row 1: saved months — auto-loads on selection -->
             <div class="month-selectors" style="border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px">
-              <label style="font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em">Saved month</label>
-              <select id="monthSelect" style="min-width:260px"></select>
+              <label style="font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em">Load saved month</label>
+              <select id="monthSelect" style="min-width:260px" title="Select a month to load it"></select>
+              <span class="hint" id="autoLoadHint" style="font-style:italic;color:var(--teal)"></span>
               <button class="btn btn-ghost" id="reapplyBtn">↻ Reapply Rules</button>
               <button class="btn btn-danger" id="resetBtn">✕ Reset Month</button>
-              <span class="hint" id="autoLoadHint" style="font-style:italic"></span>
             </div>
             <!-- Row 2: process a new month -->
             <div class="month-selectors" style="margin-bottom:12px">

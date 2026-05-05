@@ -649,8 +649,9 @@
     return `RULE-${String(max + 1).padStart(4, "0")}`;
   }
 
-  // For save/reapply operations — uses the loaded month, NOT the saved-months dropdown
-  function currentMonthKey() { return state.loadedMonth || $("monthInput").value; }
+  // Returns the currently loaded month key — used for exports, audit, reapply, reset.
+  // processAndSaveMonth manages its own month key directly (asks user after parse).
+  function currentMonthKey() { return state.loadedMonth || ""; }
   async function readFile(input) { return input.files[0] ? input.files[0].text() : ""; }
 
   async function ensureSupabase() {
@@ -701,7 +702,7 @@
       $("monthSelect").value = recent.month_key;
       const hint = $("autoLoadHint");
       if (hint) hint.textContent = `Auto-loading ${recent.month_key}…`;
-      await loadMonth();
+      await loadMonth(recent.month_key);
       if (hint) hint.textContent = "";
     }
     renderMultiMonthSelector();
@@ -1039,10 +1040,10 @@
     }
   }
 
-  async function loadMonth() {
+  async function loadMonth(monthKey) {
     if (state.busy) return;
-    const monthKey = currentMonthKey();
-    if (!monthKey) return setStatus("Choose a saved month first.", "error");
+    monthKey = monthKey || $("monthSelect").value;
+    if (!monthKey) return setStatus("Select a saved month from the dropdown.", "error");
     setBusy(true);
     setStatus("Loading…", "");
     try {
@@ -1634,7 +1635,7 @@
     $("monthInput").value = new Date().toISOString().slice(0, 7);
     bindTabs();
     $("processBtn").addEventListener("click", processAndSaveMonth);
-    $("monthSelect").addEventListener("change", async () => { if ($("monthSelect").value) await loadMonth(); });
+    $("monthSelect").addEventListener("change", async () => { const k = $("monthSelect").value; if (k) await loadMonth(k); });
     $("reapplyBtn").addEventListener("click", reapplySavedRules);
     $("resetBtn").addEventListener("click", resetMonth);
     $("saveRuleBtn").addEventListener("click", saveRule);
