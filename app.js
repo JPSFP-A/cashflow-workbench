@@ -97,15 +97,15 @@
 
   function fixed(line, spans) { return spans.map(([s, e]) => line.slice(s, e).trim()); }
 
-  // Extract segments from Oracle GL account code  e.g. "01.1010.001.12345.00000"
-  // Seg 0 = entity, Seg 1 = natural acct / bank acct, Seg 2 = cost centre / cost_item,
-  // Seg 3 = FPC / project, Seg 4 = future/interco
+  // Extract segments from Oracle GL account code e.g. "01.001.12345.10200.00000"
+  // Seg 1 = entity, Seg 2 = cost centre, Seg 3 = cost_item,
+  // Seg 4 = bank account number (confirmed by JPS), Seg 5 = FPC / project
   function accountParts(account) {
     const p = String(account || "").split(".");
     return {
-      bank_account: p[1] || "",                                                            // segment 2
-      cost_item:    (p[2] || "").replace(/^0+/, "") || "0",                                // segment 3
-      fpc:          (p[3] || p[4] || "").slice(0, 5).replace(/^0+/, "") || (p[3] || "")   // segment 4/5
+      cost_item:    (p[2] || "").replace(/^0+/, "") || "0",  // segment 3
+      bank_account: p[3] || "",                               // segment 4
+      fpc:          (p[4] || "").replace(/^0+/, "") || ""    // segment 5
     };
   }
 
@@ -146,27 +146,22 @@
       if (!source || (!debit_usd && !credit_usd)) continue;
       const parts = accountParts(account);
 
-      // bank_account: prefer an explicit column in extra[] that looks like an account code,
-      // otherwise fall back to the GL natural-account segment.
-      const explicitBankAcct = extra.find((v) => /^\d{4,}/.test(v)) || "";
-
       rows.push({
         record_key:    `${name}-${rows.length + 1}`,
         data_source:   "Cashbook",
         source_file:   name,
         role:          debit_usd ? "Inflow" : "Cashbook Credit",
         source, category_code, batch_name, je_name, account,
-        description, entry_item,
+        description,
+        // Extra mid-columns joined into entry_item so nothing is silently dropped
+        entry_item:    [entry_item, ...extra].filter(Boolean).join(" | ") || entry_item,
         debit_usd, credit_usd,
         amount:        debit_usd || credit_usd,
         signed_amount: debit_usd - credit_usd,
         vendor: "", pay_group: "",
         fpc:          parts.fpc,
         cost_item:    parts.cost_item,
-        bank_account: explicitBankAcct || parts.bank_account || "",
-        // Preserve all extra reference fields in entry_item if only one exists,
-        // otherwise join them so nothing is silently dropped
-        ...(extra.length > 1 ? { entry_item: [entry_item, ...extra].filter(Boolean).join(" | ") } : {})
+        bank_account: parts.bank_account  // segment 4 of GL account code
       });
     }
     return rows;
