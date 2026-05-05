@@ -738,7 +738,7 @@
   }
   function renderDataTab(name) {
     if (name === "outflows") { renderOutflows(); pendingRender.delete("outflows"); }
-    else if (name === "base")  { renderGroupedBase(); renderBaseDetail(); pendingRender.delete("base"); }
+    else if (name === "base")  { renderGroupedBase(); renderBaseDetail(); renderJobBreakdown(); pendingRender.delete("base"); }
     else if (name === "exceptions") {
       renderExceptions();
       pendingRender.delete("exceptions");
@@ -1137,7 +1137,7 @@
   }
 
   // Slim column set for fast initial load — used for all calculations and rendering.
-  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule,main_group,sub_group";
+  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule,main_group,sub_group,jobno";
   // AP detail columns — fetched lazily only when the Exceptions tab is opened.
   const AP_DETAIL_COLS = "record_key,cc,jobno,invoice_no,invoice_date,vendor_no,emp_no,acct_date,amount_original,voucher_number,po_no,operating_unit,bank_account,check_no,check_date,amount_paid,void_flag,currency,line_no";
 
@@ -1447,9 +1447,8 @@
       while (true) {
         const { data, error } = await state.supabase
           .from("cashflow_records")
-          .select("month_id,data_source,base_case_row,pay_group,sub_group,cashbook_category,signed_amount")
+          .select("month_id,data_source,base_case_row,pay_group,sub_group,cashbook_category,signed_amount,jobno,source")
           .in("month_id", monthIds)
-          .neq("base_case_row", "")
           .range(page * PAGE, (page + 1) * PAGE - 1);
         if (error) throw error;
         all = all.concat(data || []);
@@ -1486,6 +1485,23 @@
         catMonths.set(mKey, (catMonths.get(mKey) || 0) + amt);
       }
 
+      // Job # breakdown: data_source → group_key → month_key → amount
+      // AP groups by jobno; Cashbook groups by source (CB Source column)
+      const jobSums = new Map(); // "Cashbook" | "Invoice Payments" → Map<groupKey, Map<monthKey, amount>>
+      for (const r of all) {
+        const mKey = monthMap.get(r.month_id);
+        if (!mKey) continue;
+        const amt  = Number(r.signed_amount || 0);
+        const src  = r.data_source === "Invoice Payments" ? "Invoice Payments" : "Cashbook";
+        const grp  = r.data_source === "Invoice Payments"
+          ? (r.jobno  || "(No Job #)")
+          : (r.source || "(No CB Source)");
+        if (!jobSums.has(src)) jobSums.set(src, new Map());
+        const srcMap = jobSums.get(src);
+        if (!srcMap.has(grp)) srcMap.set(grp, new Map());
+        srcMap.get(grp).set(mKey, (srcMap.get(grp).get(mKey) || 0) + amt);
+      }
+
       // Sort months chronologically
       const sortedKeys = selectedKeys.slice().sort();
 
@@ -1511,8 +1527,9 @@
 
       // Reset collapsed state to all-expanded when new report generated
       state.multiCollapsed = new Set();
-      state.multiReport = { rows: reportRows, keys: sortedKeys };
+      state.multiReport = { rows: reportRows, keys: sortedKeys, jobSums };
       renderMultiReportTable();
+      renderMultiJobBreakdown();
       const hint = $("multiReportHint");
       if (hint) hint.textContent = "";
       const exportBtn = $("exportMultiBtn");
@@ -1632,6 +1649,110 @@
     state.multiCollapsed.clear();
     renderMultiReportTable();
   }
+
+  // ── Job # breakdown — Base Case tab (single loaded month) ────────────
+  function renderJobBreakdown() {
+    const tbl = $("jobBreakdownTable");
+    if (!tbl) return;
+    if (!state.records.length) { tbl.innerHTML = ""; return; }
+
+    // Group: data_source → group_key → { amount, lines }
+    const sources = ["Cashbook", "Invoice Payments"];
+    const bySource = new Map();
+    for (const r of state.records) {
+      const src = r.data_source === "Invoice Payments" ? "Invoice Payments" : "Cashbook";
+      const grp = r.data_source === "Invoice Payments"
+        ? (r.jobno  || "(No Job #)")
+        : (r.source || "(No CB Source)");
+      if (!bySource.has(src)) bySource.set(src, new Map());
+      const grpMap = bySource.get(src);
+      const cur = grpMap.get(grp) || { amount: 0, lines: 0 };
+      cur.amount += Number(r.signed_amount || 0);
+      cur.lines  += 1;
+      grpMap.set(grp, cur);
+    }
+
+    const bodyRows = [];
+    for (const src of sources) {
+      const grpMap = bySource.get(src);
+      if (!grpMap) continue;
+
+      bodyRows.push(`<tr style="background:#1e3a5f">
+        <td colspan="3" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(src.toUpperCase())}</td>
+      </tr>`);
+
+      let srcTotal = 0;
+      const sorted = [...grpMap.entries()].sort((a, b) => Math.abs(b[1].amount) - Math.abs(a[1].amount));
+      for (const [grp, d] of sorted) {
+        srcTotal += d.amount;
+        const c = d.amount < 0 ? "var(--red)" : "inherit";
+        bodyRows.push(`<tr>
+          <td style="padding-left:20px">${esc(grp)}</td>
+          <td class="num" style="color:${c}">${money(d.amount / 1000)}</td>
+          <td class="num" style="color:var(--muted)">${d.lines}</td>
+        </tr>`);
+      }
+      const tc = srcTotal < 0 ? "var(--red)" : "inherit";
+      bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
+        <td style="padding-left:20px;font-weight:700">Total ${esc(src)}</td>
+        <td class="num" style="font-weight:700;color:${tc}">${money(srcTotal / 1000)}</td>
+        <td class="num"></td>
+      </tr>`);
+    }
+
+    tbl.innerHTML = `<thead><tr><th>Job # / CB Source</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${bodyRows.join("")}</tbody>`;
+  }
+
+  // ── Job # breakdown — Multi-Month tab ───────────────────────────────
+  function renderMultiJobBreakdown() {
+    const tbl  = $("multiJobTable");
+    if (!tbl) return;
+    const { jobSums, keys } = state.multiReport || {};
+    if (!jobSums || !keys || !keys.length) { tbl.innerHTML = ""; return; }
+
+    const fmtK = (v) => {
+      const style = v < 0 ? "color:var(--red)" : "";
+      return `<td class="num" style="${style}">${v === 0 ? "—" : money(v / 1000)}</td>`;
+    };
+
+    const bodyRows = [];
+    const srcOrder = ["Cashbook", "Invoice Payments"];
+    for (const src of srcOrder) {
+      const grpMap = jobSums.get(src);
+      if (!grpMap) continue;
+
+      bodyRows.push(`<tr style="background:#1e3a5f">
+        <td colspan="${keys.length + 2}" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(src.toUpperCase())}</td>
+      </tr>`);
+
+      // Sort by absolute total descending
+      const sorted = [...grpMap.entries()]
+        .map(([grp, byMonth]) => ({ grp, byMonth, total: keys.reduce((s, k) => s + (byMonth.get(k) || 0), 0) }))
+        .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+
+      const srcColTotals = new Array(keys.length).fill(0);
+      let srcTotal = 0;
+      for (const { grp, byMonth, total } of sorted) {
+        bodyRows.push(`<tr>
+          <td style="padding-left:20px">${esc(grp)}</td>
+          ${keys.map((k, i) => { const v = byMonth.get(k) || 0; srcColTotals[i] += v; return fmtK(v); }).join("")}
+          ${fmtK(total)}
+        </tr>`);
+        srcTotal += total;
+      }
+
+      const tc = (v) => `font-weight:700${v < 0 ? ";color:var(--red)" : ""}`;
+      bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
+        <td style="padding-left:20px;font-weight:700">Total ${esc(src)}</td>
+        ${srcColTotals.map((v) => `<td class="num" style="${tc(v)}">${money(v / 1000)}</td>`).join("")}
+        <td class="num" style="${tc(srcTotal)}">${money(srcTotal / 1000)}</td>
+      </tr>`);
+    }
+
+    const thHtml = [`Job # / CB Source`, ...keys, `Total US$'000`].map((h) => `<th>${esc(h)}</th>`).join("");
+    tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyRows.join("")}</tbody>`;
+  }
+
 
   function exportMultiMonthReport() {
     const { rows, keys } = state.multiReport || { rows: [], keys: [] };
