@@ -754,6 +754,21 @@
                   <input id="paygroupFilterValue">
                 </div>
                 <div class="form-field">
+                  <label>Main Group</label>
+                  <select id="mainGroupValue">
+                    <option value="">— Select —</option>
+                    <option>Inflows</option>
+                    <option>Operating Outflows</option>
+                    <option>Capital Outflows</option>
+                    <option>Financing</option>
+                    <option>Non-Cash / Transfers</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Sub Group</label>
+                  <input id="subGroupValue" placeholder="e.g. Energy & Power, Personnel, Debt Service">
+                </div>
+                <div class="form-field">
                   <label>Notes</label>
                   <textarea id="notesValue" rows="2"></textarea>
                 </div>
@@ -770,9 +785,15 @@
 
       <!-- ── Base Case ── -->
       <div class="tab-panel" id="base">
-        <div class="panel">
-          <div class="panel-head">Base Case Summary <button class="btn btn-ghost btn-sm" id="exportBaseBtn">⬇ Excel</button></div>
-          <div class="tablebox"><table id="baseTable"></table></div>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head">By Group / Sub-Group <button class="btn btn-ghost btn-sm" id="exportBaseGroupBtn">⬇ Excel</button></div>
+            <div class="tablebox tall"><table id="groupedBaseTable"></table></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">Base Case Detail <button class="btn btn-ghost btn-sm" id="exportBaseBtn">⬇ Excel</button></div>
+            <div class="tablebox tall"><table id="baseTable"></table></div>
+          </div>
         </div>
       </div>
 
