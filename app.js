@@ -397,11 +397,20 @@
       { label: "Source", key: "data_source" },
       { label: "Category", key: "cashbook_category" },
       { label: "Base Row", key: "base_case_row", render: (r) => r.base_case_row ? esc(r.base_case_row) : '<span class="bad">—</span>' },
-      { label: "Vendor / Pay Group", key: "vendor", render: (r) => esc(r.vendor || r.pay_group) },
+      { label: "Vendor", key: "vendor" },
+      { label: "Pay Group", key: "pay_group" },
       { label: "FPC", key: "fpc" },
-      { label: "Cost", key: "cost_item" },
+      { label: "CC", key: "cc" },
+      { label: "Cost Item", key: "cost_item" },
+      { label: "Invoice #", key: "invoice_no" },
+      { label: "Inv Date", key: "invoice_date" },
+      { label: "Check #", key: "check_no" },
+      { label: "Check Date", key: "check_date" },
+      { label: "PO #", key: "po_no" },
       { label: "Description", key: "description" },
-      { label: "Amount", key: "amount", num: true, render: (r) => money(r.amount) }
+      { label: "Amount (USD)", key: "amount", num: true, render: (r) => money(r.amount) },
+      { label: "Orig Amount", key: "amount_original", num: true, render: (r) => r.amount_original ? money(r.amount_original) : "" },
+      { label: "Currency", key: "currency" }
     ], rows);
   }
 
@@ -477,7 +486,11 @@
       return false;
     }
     $("setupPanel").style.display = "none";
-    if (!state.supabase) {
+    // Use the shared authenticated client from index.html if available,
+    // otherwise fall back to creating a new one (anon, for initial load)
+    if (window.APP_SUPABASE_CLIENT) {
+      state.supabase = window.APP_SUPABASE_CLIENT;
+    } else if (!state.supabase) {
       state.supabase = window.supabase.createClient(window.APP_CONFIG.supabaseUrl, window.APP_CONFIG.supabaseAnonKey);
     }
     return true;
@@ -702,9 +715,11 @@
   }
 
   async function saveMonthToDb(monthKey, uploads, records) {
-    const upsertMonth = await state.supabase.from("cashflow_months").upsert([{ month_key: monthKey, last_processed_at: timestamp(), processed_by: userName() }], { onConflict: "month_key" }).select("id,last_processed_at").single();
+    const upsertMonth = await state.supabase.from("cashflow_months").upsert([{ month_key: monthKey, last_processed_at: timestamp(), processed_by: userName() }], { onConflict: "month_key" }).select("id,last_processed_at");
     if (upsertMonth.error) throw upsertMonth.error;
-    const monthId = upsertMonth.data.id;
+    const upsertedRow = Array.isArray(upsertMonth.data) ? upsertMonth.data[0] : upsertMonth.data;
+    if (!upsertedRow) throw new Error("Failed to save month — no row returned. Check Supabase RLS policies.");
+    const monthId = upsertedRow.id;
     await state.supabase.from("cashflow_source_uploads").delete().eq("month_id", monthId);
     await state.supabase.from("cashflow_records").delete().eq("month_id", monthId);
     const uploadRows = Object.entries(uploads).filter(([, content]) => content).map(([source_type, content]) => ({ month_id: monthId, source_type, file_name: `${source_type}.txt`, content_text: content, created_by: userName() }));
@@ -718,7 +733,7 @@
       for (let i = 0; i < total; i += chunkSize) {
         const saved = Math.min(i + chunkSize, total);
         setStatus(`Saving records… ${saved.toLocaleString()} / ${total.toLocaleString()}`, "");
-        const chunk = records.slice(i, i + chunkSize).map((r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "" }));
+        const chunk = records.slice(i, i + chunkSize).map((r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "", cc: r.cc || "", jobno: r.jobno || "", invoice_no: r.invoice_no || "", invoice_date: r.invoice_date || "", vendor_no: r.vendor_no || "", emp_no: r.emp_no || "", acct_date: r.acct_date || "", amount_original: r.amount_original ? num(r.amount_original) : null, voucher_number: r.voucher_number || "", po_no: r.po_no || "", operating_unit: r.operating_unit || "", bank_account: r.bank_account || "", check_no: r.check_no || "", check_date: r.check_date || "", amount_paid: r.amount_paid ? num(r.amount_paid) : null, void_flag: r.void || "", currency: r.currency || "", line_no: r.line_no || "" }));
         const { error } = await state.supabase.from("cashflow_records").insert(chunk);
         if (error) throw error;
       }
@@ -776,7 +791,7 @@
   }
 
   // Columns needed for rendering, mapping, and export — excludes raw_json (was 13 MB / month).
-  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule";
+  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,cashbook_category,base_case_row,mapped,mapping_rule,cc,jobno,invoice_no,invoice_date,vendor_no,emp_no,acct_date,amount_original,voucher_number,po_no,operating_unit,bank_account,check_no,check_date,amount_paid,void_flag,currency,line_no";
 
   async function fetchAllRecords(monthId) {
     // PostgREST default row cap is 1 000. Paginate to get every record.
@@ -808,8 +823,9 @@
       const { data: month, error: monthError } = await state.supabase
         .from("cashflow_months")
         .select("id,month_key,last_processed_at,processed_by")
-        .eq("month_key", monthKey).single();
+        .eq("month_key", monthKey).maybeSingle();
       if (monthError) { setStatus(monthError.message, "error"); return; }
+      if (!month) { setStatus(`Month ${monthKey} not found.`, "error"); return; }
 
       const [records, { data: uploads }] = await Promise.all([
         fetchAllRecords(month.id),
@@ -843,7 +859,7 @@
     try {
       let rawUploads = (state.uploads.ap || state.uploads.cashbook_description || state.uploads.cashbook_account) ? state.uploads : null;
       if (!rawUploads) {
-        const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).single();
+        const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).maybeSingle();
         if (!month) { setStatus("Month not found.", "error"); return; }
         const { data: uploadRows } = await state.supabase.from("cashflow_source_uploads").select("source_type,content_text").eq("month_id", month.id);
         rawUploads = Object.fromEntries((uploadRows || []).map((u) => [u.source_type, u.content_text]));
@@ -886,7 +902,7 @@
       try { await callEdgeFn("notify_delete", { month_key: monthKey, deleter_name: userName() }); }
       catch (_) { /* non-fatal — email config optional */ }
 
-      const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).single();
+      const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).maybeSingle();
       if (!month) { setStatus("Month not found.", "error"); return; }
       await state.supabase.from("cashflow_source_uploads").delete().eq("month_id", month.id);
       await state.supabase.from("cashflow_records").delete().eq("month_id", month.id);
@@ -1190,12 +1206,69 @@
     download(`cashflow_report_${monthKey}.xls`, html, "application/vnd.ms-excel");
   }
 
+  function xlsWrap(title, monthKey, bodyHtml) {
+    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8"><style>
+      body{font-family:Calibri,Arial,sans-serif;font-size:11pt}
+      table{border-collapse:collapse}
+      th,td{border:1px solid #aab;padding:4px 8px}
+      th{background:#1d4e89;color:white;font-weight:700}
+      .num{text-align:right}
+      h2{color:#0f2744;font-size:13pt;margin-bottom:4px}
+      p{color:#5e6875;font-size:10pt;margin-bottom:10px}
+    </style></head>
+    <body>
+      <h2>JPS FP&amp;A — ${esc(title)}</h2>
+      <p>Month: ${esc(monthKey)} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</p>
+      ${bodyHtml}
+    </body></html>`;
+  }
+
+  function exportOutflows() {
+    const monthKey = currentMonthKey() || "month";
+    const sections = [
+      `<h3>AP Outflows — By Base Case Row</h3>` + tableToCleanHtml($("outflowBaseTable")),
+      `<br><h3>AP Outflows — By Category</h3>` + tableToCleanHtml($("outflowCategoryTable")),
+      `<br><h3>Cashbook Summary</h3>` + tableToCleanHtml($("cashbookCheckTable"))
+    ].join("");
+    download(`cashflow_outflows_${monthKey}.xls`, xlsWrap(`Outflow Validation — ${monthKey}`, monthKey, sections), "application/vnd.ms-excel");
+  }
+
+  function exportExceptions() {
+    if (!state.records.length) return;
+    const monthKey = currentMonthKey() || "month";
+    const rows = state.records.filter((r) => !r.mapped || !r.base_case_row);
+    if (!rows.length) { setStatus("No exceptions to export.", "ok"); return; }
+    const keys = ["record_key","data_source","cashbook_category","base_case_row","vendor","pay_group","fpc","cc","cost_item","invoice_no","invoice_date","check_no","check_date","po_no","description","amount","amount_original","currency","voucher_number","operating_unit","bank_account","mapping_rule","mapped"];
+    const thHtml = keys.map((k) => `<th>${esc(k)}</th>`).join("");
+    const bodyHtml = rows.map((r) => `<tr>${keys.map((k) => {
+      const v = r[k] ?? "";
+      const isNum = ["amount","amount_original"].includes(k);
+      return `<td${isNum ? ' class="num"' : ""}>${esc(String(v))}</td>`;
+    }).join("")}</tr>`).join("");
+    const tbl = `<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+    download(`cashflow_exceptions_${monthKey}.xls`, xlsWrap(`Exceptions / Unmapped — ${monthKey}`, monthKey, tbl), "application/vnd.ms-excel");
+  }
+
+  function exportBase() {
+    const monthKey = currentMonthKey() || "month";
+    download(`cashflow_base_${monthKey}.xls`, xlsWrap(`Base Case Summary — ${monthKey}`, monthKey, tableToCleanHtml($("baseTable"))), "application/vnd.ms-excel");
+  }
+
+  function exportRulesXls() {
+    const monthKey = currentMonthKey() || "month";
+    download(`cashflow_rules_${monthKey}.xls`, xlsWrap("Mapping Rules", monthKey, tableToCleanHtml($("rulesTable"))), "application/vnd.ms-excel");
+  }
+
   function bindTabs() {
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         document.querySelectorAll(".tab-btn,.tab-panel").forEach((x) => x.classList.remove("active"));
         btn.classList.add("active");
         $(btn.dataset.tab).classList.add("active");
+        // Show sidebar search only on Rules tab
+        const sbSearch = document.querySelector('.cwb-sidebar .sb-search');
+        if (sbSearch) sbSearch.classList.toggle('visible', btn.dataset.tab === 'rules');
         // Render this tab if its data is stale
         if (pendingRender.has(btn.dataset.tab)) renderDataTab(btn.dataset.tab);
       });
@@ -1217,6 +1290,10 @@
     $("exportRecordsBtn").addEventListener("click", exportRecords);
     $("exportRulesBtn").addEventListener("click", exportRules);
     $("exportReportBtn").addEventListener("click", exportReport);
+    if ($("exportOutflowsBtn"))   $("exportOutflowsBtn").addEventListener("click", exportOutflows);
+    if ($("exportExceptionsBtn")) $("exportExceptionsBtn").addEventListener("click", exportExceptions);
+    if ($("exportBaseBtn"))       $("exportBaseBtn").addEventListener("click", exportBase);
+    if ($("exportRulesXlsBtn"))   $("exportRulesXlsBtn").addEventListener("click", exportRulesXls);
     if ($("rulesSearch")) $("rulesSearch").addEventListener("input", renderRules);
     if ($("promptReapplyBtn")) $("promptReapplyBtn").addEventListener("click", reapplySavedRules);
     if ($("promptDismissBtn")) $("promptDismissBtn").addEventListener("click", hideReapplyPrompt);

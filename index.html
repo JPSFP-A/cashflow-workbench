@@ -454,7 +454,8 @@
     .cwb-sidebar .sb-app-name { font-size: 10px; font-weight: 700; color: #5A6FA8; text-transform: uppercase; letter-spacing: .08em; }
     .cwb-sidebar .sb-title { font-size: 15px; font-weight: 700; color: #fff; margin-top: 2px; }
     .cwb-sidebar .sb-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 700; background: rgba(245,158,11,.15); color: #FBB024; border: 1px solid rgba(245,158,11,.25); }
-    .cwb-sidebar .sb-search { margin: 10px 12px; position: relative; }
+    .cwb-sidebar .sb-search { margin: 10px 12px; position: relative; display: none; }
+    .cwb-sidebar .sb-search.visible { display: block; }
     .cwb-sidebar .sb-search input { width: 100%; padding: 7px 10px 7px 28px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; color: #B8C5DC; font-size: 11px; outline: none; font-family: inherit; }
     .cwb-sidebar .sb-search input::placeholder { color: #5A6FA8; }
     .cwb-sidebar .sb-search .si { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: #5A6FA8; font-size: 11px; }
@@ -492,9 +493,9 @@
        APP-SWITCHER BAR (shown after login)
   ═══════════════════════════════════════════════════════════════ -->
   <div id="appSwitcher" style="display:none;height:38px;background:#060c18;border-bottom:1px solid rgba(255,255,255,0.05);align-items:center;padding:0 12px;gap:4px;flex-shrink:0;z-index:200;position:relative;">
-    <a href="https://jps-fp-a.vercel.app" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">📊 FP&amp;A</a>
-    <a href="https://propel-delta.vercel.app" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">🏗 Propel</a>
-    <a href="https://sales-forecast-jps.vercel.app" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ Sales</a>
+    <a href="https://jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">📊 FP&amp;A</a>
+    <a href="https://propel.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">🏗 Propel</a>
+    <a href="https://sales.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ Sales</a>
     <a href="#" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;background:rgba(245,158,11,0.1);color:#FBB024;border:1px solid rgba(245,158,11,0.25);text-decoration:none;">💧 Cashflow</a>
     <span style="margin-left:auto;font-size:10px;color:#3B4F8C;">⚡ JPS Financial Systems</span>
   </div>
@@ -542,12 +543,12 @@
         <div class="cwb-nav-item" onclick="cwbNav('exceptions',this)"><span class="ni-icon">🔍</span>Map Exceptions<span class="ni-badge" id="sideExcBadge" style="display:none"></span></div>
         <div class="cwb-nav-item" onclick="cwbNav('base',this)"><span class="ni-icon">📋</span>Base Case</div>
         <div class="cwb-nav-item" onclick="cwbNav('rules',this)"><span class="ni-icon">⚙</span>Rules</div>
-        <div class="cwb-nav-item" onclick="cwbNav('audit',this)"><span class="ni-icon">📜</span>Audit Log</div>
         <div class="cwb-nav-item" onclick="cwbNav('multimonth',this)"><span class="ni-icon">📊</span>Multi-Month Report</div>
       </div>
       <div class="sb-section">
         <div class="sb-label">Admin</div>
-        <div class="cwb-nav-item" onclick="cwbNav('admin',this)"><span class="ni-icon">🗓</span>Month Manager</div>
+        <div class="cwb-nav-item" onclick="cwbNav('datamanager',this)"><span class="ni-icon">📁</span>Data Manager</div>
+        <div class="cwb-nav-item" onclick="cwbNav('audit',this)"><span class="ni-icon">📜</span>Audit Log</div>
         <div class="cwb-nav-item" onclick="cwbNav('instructions',this)"><span class="ni-icon">❓</span>Instructions</div>
       </div>
       <div class="sb-footer">
@@ -594,47 +595,6 @@
         ⚠️ Add a <code>config.js</code> with your Supabase URL and anon key, then run <code>supabase/schema.sql</code>.
       </div>
 
-      <!-- Month workspace -->
-      <div class="workspace-card" id="monthPanel">
-        <div class="workspace-card-head">
-          <h2>Month Workspace</h2>
-          <div class="export-group">
-            <button class="btn btn-ghost btn-sm" id="exportRecordsBtn">⬇ Records CSV</button>
-            <button class="btn btn-ghost btn-sm" id="exportRulesBtn">⬇ Rules CSV</button>
-            <button class="btn btn-ghost btn-sm" id="exportReportBtn">⬇ Excel Report</button>
-          </div>
-        </div>
-        <div class="workspace-card-body">
-          <div class="month-selectors">
-            <label>Month <input id="monthInput" type="month" style="width:160px"></label>
-            <label>Saved months <select id="monthSelect" style="min-width:240px"></select></label>
-            <button class="btn btn-primary" id="processBtn">▶ Process &amp; Save</button>
-            <button class="btn btn-ghost" id="loadMonthBtn">↩ Load Month</button>
-            <button class="btn btn-ghost" id="reapplyBtn">↻ Reapply Rules</button>
-            <button class="btn btn-danger" id="resetBtn">✕ Reset Month</button>
-          </div>
-          <div class="file-grid">
-            <div class="file-slot">
-              <label>AP Invoice / Payment Report</label>
-              <input id="apFile" type="file" accept=".txt,.csv">
-            </div>
-            <div class="file-slot">
-              <label>Cashbook Description (180)</label>
-              <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv">
-            </div>
-            <div class="file-slot">
-              <label>Cashbook Account (132)</label>
-              <input id="cashbookAccountFile" type="file" accept=".txt,.csv">
-            </div>
-            <div class="file-slot">
-              <label>Optional Rules Import CSV</label>
-              <input id="mappingFile" type="file" accept=".csv">
-            </div>
-          </div>
-          <p class="hint">Source files are stored in Supabase so the month can be reprocessed at any time. Reset wipes all records and uploads for the selected month.</p>
-        </div>
-      </div>
-
       <!-- Month status bar -->
       <div class="month-bar" id="monthBar">
         <div class="month-bar-dot"></div>
@@ -648,18 +608,65 @@
 
       <!-- Tab navigation -->
       <nav class="tab-nav">
-        <button class="tab-btn active" data-tab="outflows">📤 Outflow Validation</button>
+        <button class="tab-btn active" data-tab="datamanager">📁 Data Manager</button>
+        <button class="tab-btn" data-tab="outflows">📤 Outflow Validation</button>
         <button class="tab-btn" data-tab="exceptions">🔍 Map Exceptions <span class="tab-badge" id="excBadge"></span></button>
         <button class="tab-btn" data-tab="base">📋 Base Case</button>
         <button class="tab-btn" data-tab="rules">⚙ Rules</button>
-        <button class="tab-btn" data-tab="audit">📜 Audit Log</button>
         <button class="tab-btn" data-tab="multimonth">📊 Multi-Month Report</button>
         <button class="tab-btn" data-tab="admin">🔐 Admin</button>
+        <button class="tab-btn" data-tab="audit">📜 Audit Log</button>
         <button class="tab-btn" data-tab="instructions">❓ Instructions</button>
       </nav>
 
+      <!-- ── Data Manager ── -->
+      <div class="tab-panel active" id="datamanager">
+        <div class="workspace-card" id="monthPanel">
+          <div class="workspace-card-head">
+            <h2>Data Manager</h2>
+            <div class="export-group">
+              <button class="btn btn-ghost btn-sm" id="exportRecordsBtn">⬇ Records CSV</button>
+              <button class="btn btn-ghost btn-sm" id="exportRulesBtn">⬇ Rules CSV</button>
+              <button class="btn btn-ghost btn-sm" id="exportReportBtn">⬇ Excel Report</button>
+            </div>
+          </div>
+          <div class="workspace-card-body">
+            <div class="month-selectors">
+              <label>Month <input id="monthInput" type="month" style="width:160px"></label>
+              <label>Saved months <select id="monthSelect" style="min-width:240px"></select></label>
+              <button class="btn btn-primary" id="processBtn">▶ Process &amp; Save</button>
+              <button class="btn btn-ghost" id="loadMonthBtn">↩ Load Month</button>
+              <button class="btn btn-ghost" id="reapplyBtn">↻ Reapply Rules</button>
+              <button class="btn btn-danger" id="resetBtn">✕ Reset Month</button>
+            </div>
+            <div class="file-grid">
+              <div class="file-slot">
+                <label>AP Invoice / Payment Report</label>
+                <input id="apFile" type="file" accept=".txt,.csv">
+              </div>
+              <div class="file-slot">
+                <label>Cashbook Description (180)</label>
+                <input id="cashbookDescriptionFile" type="file" accept=".txt,.csv">
+              </div>
+              <div class="file-slot">
+                <label>Cashbook Account (132)</label>
+                <input id="cashbookAccountFile" type="file" accept=".txt,.csv">
+              </div>
+              <div class="file-slot">
+                <label>Optional Rules Import CSV</label>
+                <input id="mappingFile" type="file" accept=".csv">
+              </div>
+            </div>
+            <p class="hint">Source files are stored in Supabase so the month can be reprocessed at any time. Reset wipes all records and uploads for the selected month.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Outflow Validation ── -->
-      <div class="tab-panel active" id="outflows">
+      <div class="tab-panel" id="outflows">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <button class="btn btn-ghost btn-sm" id="exportOutflowsBtn">⬇ Excel</button>
+        </div>
         <div class="grid-3">
           <div class="panel">
             <div class="panel-head">AP Outflows — By Base Case Row</div>
@@ -680,7 +687,7 @@
       <div class="tab-panel" id="exceptions">
         <div class="grid-2">
           <div class="panel">
-            <div class="panel-head">Exceptions / Unmapped Lines</div>
+            <div class="panel-head">Exceptions / Unmapped Lines <button class="btn btn-ghost btn-sm" id="exportExceptionsBtn">⬇ Excel</button></div>
             <div class="search-bar">
               <input id="searchInput" placeholder="Search vendor, pay group, FPC, description…">
               <select id="sourceFilter">
@@ -764,7 +771,7 @@
       <!-- ── Base Case ── -->
       <div class="tab-panel" id="base">
         <div class="panel">
-          <div class="panel-head">Base Case Summary</div>
+          <div class="panel-head">Base Case Summary <button class="btn btn-ghost btn-sm" id="exportBaseBtn">⬇ Excel</button></div>
           <div class="tablebox"><table id="baseTable"></table></div>
         </div>
       </div>
@@ -775,6 +782,7 @@
           <div class="panel-head">
             Saved Mapping Rules
             <span class="hint" id="rulesCount"></span>
+            <button class="btn btn-ghost btn-sm" id="exportRulesXlsBtn">⬇ Excel</button>
           </div>
           <div class="search-bar">
             <input id="rulesSearch" placeholder="Filter by code, type, match value, category…">
@@ -956,6 +964,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
+  <!-- Create shared client BEFORE app.js so ensureSupabase() uses it from the start -->
+  <script>
+    window.APP_SUPABASE_CLIENT = window.supabase.createClient(
+      window.APP_CONFIG.supabaseUrl,
+      window.APP_CONFIG.supabaseAnonKey
+    );
+  </script>
   <script src="./app.js"></script>
   <script>
     // ── Theme management ──────────────────────────────────────────
@@ -991,6 +1006,9 @@
       document.querySelectorAll('.tab-btn').forEach(b => {
         if (b.dataset.tab === tabId) b.classList.add('active');
       });
+      // Show sidebar search only on Rules tab
+      const sbSearch = document.querySelector('.cwb-sidebar .sb-search');
+      if (sbSearch) sbSearch.classList.toggle('visible', tabId === 'rules');
       // Sidebar active state
       document.querySelectorAll('.cwb-nav-item').forEach(n => n.classList.remove('active'));
       if (el) el.classList.add('active');
@@ -1029,11 +1047,8 @@
       const userBadge     = document.getElementById("userBadge");
       const authErr       = document.getElementById("authErr");
 
-      // Shared Supabase client (public schema for auth; admin schema queries use .schema())
-      const sb = window.supabase.createClient(
-        window.APP_CONFIG.supabaseUrl,
-        window.APP_CONFIG.supabaseAnonKey
-      );
+      // Use the shared client created before app.js — same instance = same auth session
+      const sb = window.APP_SUPABASE_CLIENT;
 
       function initials(name) {
         return name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join("");
