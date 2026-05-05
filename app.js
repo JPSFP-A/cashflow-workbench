@@ -59,7 +59,8 @@
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
-    apDetailLoaded: false         // true when AP detail columns merged into state.records
+    apDetailLoaded: false,        // true when AP detail columns merged into state.records
+    baseDetailFilter: null        // {base_case_row, cashbook_category} for drill-down
   };
 
   // Returns the name typed in the header field, falling back to "Anonymous"
@@ -348,56 +349,73 @@
     ].map(([label, val, icon, cls]) => `<div class="kpi-tile ${cls}"><div class="kpi-label">${label}</div><div class="kpi-icon">${icon}</div><div class="kpi-value">${val}</div></div>`).join("");
   }
 
-  const mainGroupOrder = ["Inflows", "Operating Outflows", "Capital Outflows", "Financing", "Non-Cash / Transfers"];
+  // ── Grouped base: base_case_row (main) → cashbook_category (sub) ─────────
+  // _baseClicks stores click target data so event delegation avoids escaping issues.
+  let _baseClicks = [];
 
   function renderGroupedBase() {
     const tbl = $("groupedBaseTable");
     if (!tbl) return;
+    _baseClicks = [];
     if (!state.records.length) { tbl.innerHTML = ""; return; }
 
-    // Build main_group → sub_group → {amount, lines}
-    const mgMap = new Map();
-    state.records.filter((r) => r.base_case_row || r.main_group).forEach((r) => {
-      const mg = r.main_group || "(Unassigned)";
-      const sg = r.sub_group  || "(Other)";
-      if (!mgMap.has(mg)) mgMap.set(mg, new Map());
-      const sgMap = mgMap.get(mg);
-      const cur = sgMap.get(sg) || { amount: 0, lines: 0 };
+    // Build base_case_row → cashbook_category → {amount, lines}
+    const bcMap = new Map();
+    state.records.filter((r) => r.base_case_row).forEach((r) => {
+      const bc  = r.base_case_row;
+      const cat = r.cashbook_category || "(Uncategorised)";
+      if (!bcMap.has(bc)) bcMap.set(bc, new Map());
+      const catMap = bcMap.get(bc);
+      const cur = catMap.get(cat) || { amount: 0, lines: 0 };
       cur.amount += Number(r.signed_amount || 0);
       cur.lines  += 1;
-      sgMap.set(sg, cur);
+      catMap.set(cat, cur);
     });
 
-    // Canonical order then unknowns alphabetically
-    const sortedMg = [
-      ...mainGroupOrder.filter((mg) => mgMap.has(mg)),
-      ...[...mgMap.keys()].filter((mg) => !mainGroupOrder.includes(mg)).sort()
+    // Sort: canonical baseRows order, then any extras alphabetically
+    const sortedBc = [
+      ...baseRows.filter((bc) => bcMap.has(bc)),
+      ...[...bcMap.keys()].filter((bc) => !baseRows.includes(bc)).sort()
     ];
 
+    const selBc  = state.baseDetailFilter?.base_case_row;
+    const selCat = state.baseDetailFilter?.cashbook_category;
+
     let grandTotal = 0;
-    const rowsHtml = sortedMg.map((mg) => {
-      const sgMap = mgMap.get(mg);
-      let mgTotal = 0;
-      const sgRows = [...sgMap.entries()].sort((a, b) => Math.abs(b[1].amount) - Math.abs(a[1].amount));
-      sgRows.forEach(([, d]) => { mgTotal += d.amount; });
-      grandTotal += mgTotal;
-      const mgColor = mgTotal < 0 ? "var(--red)" : "inherit";
-      const mgRow = `<tr style="background:#edf3f8;border-top:2px solid #c9d8e8">
-        <td style="font-weight:700;color:var(--navy)">${esc(mg)}</td>
-        <td class="num" style="font-weight:700;color:${mgColor}">${money(mgTotal)}</td>
-        <td class="num" style="font-weight:700;color:${mgColor}">${money(mgTotal / 1000)}</td>
-        <td class="num" style="font-weight:700"></td>
+    const rowsHtml = sortedBc.map((bc) => {
+      const catMap = bcMap.get(bc);
+      let bcTotal = 0; let bcLines = 0;
+      catMap.forEach((d) => { bcTotal += d.amount; bcLines += d.lines; });
+      grandTotal += bcTotal;
+
+      const bcColor = bcTotal < 0 ? "var(--red)" : "inherit";
+      const bcActive = selBc === bc && !selCat ? "background:#dbeafe;" : "";
+      const bcIdx = _baseClicks.length;
+      _baseClicks.push({ base_case_row: bc, cashbook_category: null });
+
+      const bcRow = `<tr data-bidx="${bcIdx}" class="base-row-click" style="${bcActive}background:#edf3f8;border-top:2px solid #c9d8e8;cursor:pointer">
+        <td style="font-weight:700;color:var(--navy)">${esc(bc)}</td>
+        <td class="num" style="font-weight:700;color:${bcColor}">${money(bcTotal)}</td>
+        <td class="num" style="font-weight:700;color:${bcColor}">${money(bcTotal / 1000)}</td>
+        <td class="num" style="font-weight:700">${bcLines}</td>
       </tr>`;
-      const sgHtml = sgRows.map(([sg, d]) => {
-        const c = d.amount < 0 ? "var(--red)" : "inherit";
-        return `<tr>
-          <td style="padding-left:28px;color:var(--muted)">${esc(sg)}</td>
-          <td class="num" style="color:${c}">${money(d.amount)}</td>
-          <td class="num" style="color:${c}">${money(d.amount / 1000)}</td>
-          <td class="num" style="color:var(--muted)">${d.lines}</td>
-        </tr>`;
-      }).join("");
-      return mgRow + sgHtml;
+
+      const catHtml = [...catMap.entries()]
+        .sort((a, b) => Math.abs(b[1].amount) - Math.abs(a[1].amount))
+        .map(([cat, d]) => {
+          const c = d.amount < 0 ? "var(--red)" : "inherit";
+          const catActive = selBc === bc && selCat === cat ? "background:#dbeafe;" : "";
+          const catIdx = _baseClicks.length;
+          _baseClicks.push({ base_case_row: bc, cashbook_category: cat });
+          return `<tr data-bidx="${catIdx}" class="base-row-click" style="${catActive}cursor:pointer">
+            <td style="padding-left:28px;color:var(--muted)">${esc(cat)}</td>
+            <td class="num" style="color:${c}">${money(d.amount)}</td>
+            <td class="num" style="color:${c}">${money(d.amount / 1000)}</td>
+            <td class="num" style="color:var(--muted)">${d.lines}</td>
+          </tr>`;
+        }).join("");
+
+      return bcRow + catHtml;
     }).join("");
 
     const netColor = grandTotal < 0 ? "var(--red)" : "var(--teal)";
@@ -408,7 +426,49 @@
       <td class="num"></td>
     </tr>`;
 
-    tbl.innerHTML = `<thead><tr><th>Group / Sub-Group</th><th class="num">US$ Amount</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${rowsHtml}${netRow}</tbody>`;
+    tbl.innerHTML = `<thead><tr><th>Base Case Row / Category</th><th class="num">US$ Amount</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${rowsHtml}${netRow}</tbody>`;
+  }
+
+  function selectBaseRow(idx) {
+    const item = _baseClicks[idx];
+    if (!item) return;
+    state.baseDetailFilter = item;
+    renderGroupedBase();   // re-render to update highlight
+    renderBaseDetail();
+  }
+
+  function renderBaseDetail() {
+    const tbl  = $("baseDetailTable");
+    const head = $("baseDetailHead");
+    if (!tbl) return;
+
+    const filter = state.baseDetailFilter;
+    if (!filter || !filter.base_case_row) {
+      if (head) head.textContent = "Detail";
+      tbl.innerHTML = `<tbody><tr><td colspan="8" style="color:var(--muted);padding:28px;text-align:center">← Click a row to drill into records</td></tr></tbody>`;
+      return;
+    }
+
+    const label = filter.cashbook_category
+      ? `${filter.base_case_row} › ${filter.cashbook_category}`
+      : filter.base_case_row;
+    if (head) head.textContent = `Detail: ${label}`;
+
+    const rows = state.records
+      .filter((r) => r.base_case_row === filter.base_case_row &&
+                     (!filter.cashbook_category || r.cashbook_category === filter.cashbook_category))
+      .slice(0, 1000);
+
+    table("baseDetailTable", [
+      { label: "Source",      key: "data_source" },
+      { label: "Vendor",      key: "vendor" },
+      { label: "Pay Group",   key: "pay_group" },
+      { label: "FPC",         key: "fpc" },
+      { label: "Category",    key: "cashbook_category" },
+      { label: "Description", key: "description" },
+      { label: "Amount",      key: "amount", num: true, render: (r) => money(r.amount) },
+      { label: "Rule",        key: "mapping_rule" }
+    ], rows);
   }
 
   function renderBase() {
@@ -527,7 +587,7 @@
   }
   function renderDataTab(name) {
     if (name === "outflows") { renderOutflows(); pendingRender.delete("outflows"); }
-    else if (name === "base")  { renderBase(); renderGroupedBase(); pendingRender.delete("base"); }
+    else if (name === "base")  { renderGroupedBase(); renderBaseDetail(); pendingRender.delete("base"); }
     else if (name === "exceptions") {
       renderExceptions();
       pendingRender.delete("exceptions");
@@ -958,6 +1018,7 @@
       state.loadedAt = month.last_processed_at;
       state.loadedBy = month.processed_by || null;
       state.apDetailLoaded = false;   // reset so Exceptions tab will lazy-load detail
+      state.baseDetailFilter = null;  // clear drill-down selection
       $("monthInput").value = monthKey;
       renderAll();
       setStatus(`Loaded ${monthKey} — ${records.length} records`, "ok");
@@ -1324,7 +1385,7 @@
   function exportReport() {
     const monthKey = currentMonthKey() || "month";
     const sections = [
-      `<h2>Base Case Summary — ${monthKey}</h2>` + tableToCleanHtml($("baseTable")),
+      `<h2>Base Case Summary — ${monthKey}</h2>` + tableToCleanHtml($("groupedBaseTable")),
       `<h2>AP Outflows by Base Case Row</h2>` + tableToCleanHtml($("outflowBaseTable")),
       `<h2>AP Outflows by Category</h2>` + tableToCleanHtml($("outflowCategoryTable")),
       `<h2>Cashbook Summary</h2>` + tableToCleanHtml($("cashbookCheckTable"))
@@ -1379,7 +1440,12 @@
 
   function exportBase() {
     const monthKey = currentMonthKey() || "month";
-    download(`cashflow_base_${monthKey}.xls`, xlsWrap(`Base Case Summary — ${monthKey}`, monthKey, tableToCleanHtml($("baseTable"))), "application/vnd.ms-excel");
+    const filter = state.baseDetailFilter;
+    const label = filter?.base_case_row
+      ? (filter.cashbook_category ? `${filter.base_case_row} - ${filter.cashbook_category}` : filter.base_case_row)
+      : "All";
+    const safeName = label.replace(/[^a-z0-9_\- ]/gi, "_").slice(0, 40);
+    download(`cashflow_detail_${safeName}_${monthKey}.xls`, xlsWrap(`Detail: ${label}`, monthKey, tableToCleanHtml($("baseDetailTable"))), "application/vnd.ms-excel");
   }
 
   function exportBaseGroup() {
@@ -1445,6 +1511,13 @@
     const origSaveRule = window.cashflowApp && window.cashflowApp.saveRule;
     $("saveRuleBtn").addEventListener("click", clearDirty, { capture: false });
     $("clearRuleBtn").addEventListener("click", clearDirty, { capture: false });
+    // Drill-down: click any row in grouped base table to load detail on the right
+    if ($("groupedBaseTable")) {
+      $("groupedBaseTable").addEventListener("click", (e) => {
+        const tr = e.target.closest("tr[data-bidx]");
+        if (tr) selectBaseRow(parseInt(tr.dataset.bidx, 10));
+      });
+    }
     if ($("generateMultiBtn")) $("generateMultiBtn").addEventListener("click", generateMultiMonthReport);
     if ($("exportMultiBtn"))   $("exportMultiBtn").addEventListener("click", exportMultiMonthReport);
     if ($("selectAllMonthsBtn")) $("selectAllMonthsBtn").addEventListener("click", () => {

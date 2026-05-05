@@ -290,6 +290,7 @@
 
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
     .grid-2  { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
+    tr.base-row-click:hover td { background: #eef4ff !important; }
 
     /* ── Tables ───────────────────────────────────────────────────── */
     .tablebox { overflow: auto; max-height: 58vh; border-radius: 0 0 var(--radius) var(--radius); }
@@ -787,12 +788,12 @@
       <div class="tab-panel" id="base">
         <div class="grid-2">
           <div class="panel">
-            <div class="panel-head">By Group / Sub-Group <button class="btn btn-ghost btn-sm" id="exportBaseGroupBtn">⬇ Excel</button></div>
+            <div class="panel-head">Base Case Row / Category <button class="btn btn-ghost btn-sm" id="exportBaseGroupBtn">⬇ Excel</button></div>
             <div class="tablebox tall"><table id="groupedBaseTable"></table></div>
           </div>
           <div class="panel">
-            <div class="panel-head">Base Case Detail <button class="btn btn-ghost btn-sm" id="exportBaseBtn">⬇ Excel</button></div>
-            <div class="tablebox tall"><table id="baseTable"></table></div>
+            <div class="panel-head"><span id="baseDetailHead">Detail</span> <button class="btn btn-ghost btn-sm" id="exportBaseBtn">⬇ Excel</button></div>
+            <div class="tablebox tall"><table id="baseDetailTable"></table></div>
           </div>
         </div>
       </div>
