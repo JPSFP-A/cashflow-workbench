@@ -16,6 +16,30 @@
     return [...fromRules, ...extraSg, ...extraRec];
   }
 
+  // Groups base_case_rows into sections using state.subGroups lookup.
+  // Returns Map<sectionLabel, string[]> in section-appearance order.
+  // Rows with no sub_group entry go into "(Other)".
+  function buildSectionMap(baseRowKeys) {
+    const sections = new Map();
+    const assigned = new Set();
+    for (const br of baseRowKeys) {
+      const sg = state.subGroups.find((s) => s.base_case_row === br && s.active !== false);
+      const sec = sg ? sg.sub_group : null;
+      if (sec) {
+        if (!sections.has(sec)) sections.set(sec, []);
+        sections.get(sec).push(br);
+        assigned.add(br);
+      }
+    }
+    for (const br of baseRowKeys) {
+      if (!assigned.has(br)) {
+        if (!sections.has("(Other)")) sections.set("(Other)", []);
+        sections.get("(Other)").push(br);
+      }
+    }
+    return sections;
+  }
+
 
   const state = {
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [],
@@ -362,7 +386,7 @@
     _baseClicks = [];
     if (!state.records.length) { tbl.innerHTML = ""; return; }
 
-    // Build base_case_row → cashbook_category → {amount, lines}
+    // Aggregate: base_case_row → cashbook_category → { amount, lines }
     const bcMap = new Map();
     state.records.filter((r) => r.base_case_row).forEach((r) => {
       const bc  = r.base_case_row;
@@ -375,62 +399,83 @@
       catMap.set(cat, cur);
     });
 
-    // Sort: rule-defined order (liveBaseRows), then any extras alphabetically
-    const ordered = liveBaseRows();
-    const sortedBc = [
-      ...ordered.filter((bc) => bcMap.has(bc)),
-      ...[...bcMap.keys()].filter((bc) => !ordered.includes(bc)).sort()
-    ];
+    const orderedBase = liveBaseRows().filter((br) => bcMap.has(br));
+    const extras      = [...bcMap.keys()].filter((br) => !orderedBase.includes(br)).sort();
+    const allRows     = [...orderedBase, ...extras];
+    const sections    = buildSectionMap(allRows);
 
     const selBc  = state.baseDetailFilter?.base_case_row;
     const selCat = state.baseDetailFilter?.cashbook_category;
 
     let grandTotal = 0;
-    const rowsHtml = sortedBc.map((bc) => {
-      const catMap = bcMap.get(bc);
-      let bcTotal = 0; let bcLines = 0;
-      catMap.forEach((d) => { bcTotal += d.amount; bcLines += d.lines; });
-      grandTotal += bcTotal;
+    const bodyRows = [];
 
-      const bcColor = bcTotal < 0 ? "var(--red)" : "inherit";
-      const bcActive = selBc === bc && !selCat ? "background:#dbeafe;" : "";
-      const bcIdx = _baseClicks.length;
-      _baseClicks.push({ base_case_row: bc, cashbook_category: null });
+    for (const [secName, secBrs] of sections) {
+      const presentBrs = secBrs.filter((br) => bcMap.has(br));
+      if (!presentBrs.length) continue;
 
-      const bcRow = `<tr data-bidx="${bcIdx}" class="base-row-click" style="${bcActive}background:#edf3f8;border-top:2px solid #c9d8e8;cursor:pointer">
-        <td style="font-weight:700;color:var(--navy)">${esc(bc)}</td>
-        <td class="num" style="font-weight:700;color:${bcColor}">${money(bcTotal)}</td>
-        <td class="num" style="font-weight:700;color:${bcColor}">${money(bcTotal / 1000)}</td>
-        <td class="num" style="font-weight:700">${bcLines}</td>
-      </tr>`;
+      // Section header
+      bodyRows.push(`<tr style="background:#1e3a5f">
+        <td colspan="4" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(secName.toUpperCase())}</td>
+      </tr>`);
 
-      const catHtml = [...catMap.entries()]
-        .sort((a, b) => Math.abs(b[1].amount) - Math.abs(a[1].amount))
-        .map(([cat, d]) => {
-          const c = d.amount < 0 ? "var(--red)" : "inherit";
-          const catActive = selBc === bc && selCat === cat ? "background:#dbeafe;" : "";
-          const catIdx = _baseClicks.length;
-          _baseClicks.push({ base_case_row: bc, cashbook_category: cat });
-          return `<tr data-bidx="${catIdx}" class="base-row-click" style="${catActive}cursor:pointer">
-            <td style="padding-left:28px;color:var(--muted)">${esc(cat)}</td>
-            <td class="num" style="color:${c}">${money(d.amount)}</td>
-            <td class="num" style="color:${c}">${money(d.amount / 1000)}</td>
-            <td class="num" style="color:var(--muted)">${d.lines}</td>
-          </tr>`;
-        }).join("");
+      let secTotal = 0;
 
-      return bcRow + catHtml;
-    }).join("");
+      for (const bc of presentBrs) {
+        const catMap = bcMap.get(bc);
+        let bcTotal = 0, bcLines = 0;
+        catMap.forEach((d) => { bcTotal += d.amount; bcLines += d.lines; });
+        secTotal   += bcTotal;
+        grandTotal += bcTotal;
 
+        const bcColor  = bcTotal < 0 ? "var(--red)" : "inherit";
+        const bcActive = selBc === bc && !selCat ? "background:#dbeafe;" : "";
+        const bcIdx    = _baseClicks.length;
+        _baseClicks.push({ base_case_row: bc, cashbook_category: null });
+
+        bodyRows.push(`<tr data-bidx="${bcIdx}" class="base-row-click" style="${bcActive}cursor:pointer">
+          <td style="padding-left:20px">${esc(bc)}</td>
+          <td class="num" style="color:${bcColor}">${money(bcTotal)}</td>
+          <td class="num" style="color:${bcColor}">${money(bcTotal / 1000)}</td>
+          <td class="num">${bcLines}</td>
+        </tr>`);
+
+        [...catMap.entries()]
+          .sort((a, b) => Math.abs(b[1].amount) - Math.abs(a[1].amount))
+          .forEach(([cat, d]) => {
+            const c        = d.amount < 0 ? "var(--red)" : "inherit";
+            const catActive = selBc === bc && selCat === cat ? "background:#dbeafe;" : "";
+            const catIdx   = _baseClicks.length;
+            _baseClicks.push({ base_case_row: bc, cashbook_category: cat });
+            bodyRows.push(`<tr data-bidx="${catIdx}" class="base-row-click" style="${catActive}cursor:pointer">
+              <td style="padding-left:40px;color:var(--muted);font-size:12px">${esc(cat)}</td>
+              <td class="num" style="color:${c};font-size:12px">${money(d.amount)}</td>
+              <td class="num" style="color:${c};font-size:12px">${money(d.amount / 1000)}</td>
+              <td class="num" style="color:var(--muted);font-size:12px">${d.lines}</td>
+            </tr>`);
+          });
+      }
+
+      // Section total row
+      const stColor = secTotal < 0 ? "var(--red)" : "inherit";
+      bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
+        <td style="padding-left:20px;font-weight:700">Total ${esc(secName)}</td>
+        <td class="num" style="font-weight:700;color:${stColor}">${money(secTotal)}</td>
+        <td class="num" style="font-weight:700;color:${stColor}">${money(secTotal / 1000)}</td>
+        <td class="num"></td>
+      </tr>`);
+    }
+
+    // Net row
     const netColor = grandTotal < 0 ? "var(--red)" : "var(--teal)";
-    const netRow = `<tr style="background:#edf3f8;border-top:2px solid #c9d8e8">
-      <td style="font-weight:700;color:var(--navy)">NET CASH FLOW</td>
+    bodyRows.push(`<tr style="background:#dbeafe;border-top:2px solid #93c5fd">
+      <td style="font-weight:700;color:var(--navy)">Net Inflow / (Outflow)</td>
       <td class="num" style="font-weight:700;color:${netColor}">${money(grandTotal)}</td>
       <td class="num" style="font-weight:700;color:${netColor}">${money(grandTotal / 1000)}</td>
       <td class="num"></td>
-    </tr>`;
+    </tr>`);
 
-    tbl.innerHTML = `<thead><tr><th>Base Case Row / Category</th><th class="num">US$ Amount</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${rowsHtml}${netRow}</tbody>`;
+    tbl.innerHTML = `<thead><tr><th>Cash Flow (US$'000)</th><th class="num">US$</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${bodyRows.join("")}</tbody>`;
   }
 
   function selectBaseRow(idx) {
@@ -1474,62 +1519,91 @@
 
   function renderMultiReportTable() {
     const { rows, keys } = state.multiReport || { rows: [], keys: [] };
-    const tbl = $("multiReportTable");
+    const tbl  = $("multiReportTable");
     const meta = $("multiReportMeta");
     if (!tbl) return;
     if (!rows.length) { tbl.innerHTML = ""; if (meta) meta.textContent = ""; return; }
     if (meta) meta.textContent = `${rows.length} rows · ${keys.length} month(s)`;
 
-    const colCount = keys.length + 2; // label + months + total
-    const thHtml = ["Base Case Row / Category", ...keys, "Total US$'000"].map((h) => `<th>${esc(h)}</th>`).join("");
-
-    const colorCell = (v, bold) => {
-      const style = [
-        v < 0 ? "color:var(--red)" : "",
-        bold ? "font-weight:700" : ""
-      ].filter(Boolean).join(";");
-      return `<td class="num" style="${style}">${money(v / 1000)}</td>`;
+    const fmtK = (v, bold) => {
+      const style = [v < 0 ? "color:var(--red)" : "", bold ? "font-weight:700" : ""].filter(Boolean).join(";");
+      return `<td class="num" style="${style}">${v === 0 ? "—" : money(v / 1000)}</td>`;
     };
 
-    const bodyRows = [];
-    for (const r of rows) {
-      const collapsed = state.multiCollapsed.has(r.row);
-      const hasSubRows = r.subRows && r.subRows.length > 0;
-      const toggleIcon = hasSubRows ? (collapsed ? "▶" : "▼") : "·";
-      const toggleAttr = hasSubRows ? `data-toggle="${esc(r.row)}" style="cursor:pointer;user-select:none"` : "";
+    // Section map: section → [row objects]
+    const orderedRowNames = [...rows.map((r) => r.row)];
+    const secMap = buildSectionMap(orderedRowNames);
+    // Attach actual row objects to section entries
+    const rowByName = new Map(rows.map((r) => [r.row, r]));
 
-      // Header row (base_case_row level)
-      bodyRows.push(`<tr ${toggleAttr} style="background:#edf3f8;font-weight:600">
-        <td style="padding-left:8px">${hasSubRows ? `<span class="mr-toggle" style="font-size:10px;margin-right:6px;color:var(--muted)">${toggleIcon}</span>` : `<span style="display:inline-block;width:16px"></span>`}${esc(r.row)}</td>
-        ${keys.map((k) => colorCell(r.byMonth.get(k) || 0, true)).join("")}
-        ${colorCell(r.total, true)}
+    const bodyRows = [];
+    const grandColTotals = new Array(keys.length).fill(0);
+    let grandTotal = 0;
+
+    for (const [secName, secRowNames] of secMap) {
+      const secRows = secRowNames.map((n) => rowByName.get(n)).filter(Boolean);
+      if (!secRows.length) continue;
+
+      // Section header
+      bodyRows.push(`<tr style="background:#1e3a5f">
+        <td colspan="${keys.length + 2}" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(secName.toUpperCase())}</td>
       </tr>`);
 
-      // Sub-rows (cashbook_category level)
-      if (hasSubRows && !collapsed) {
-        for (const sr of r.subRows) {
-          bodyRows.push(`<tr style="background:#fff">
-            <td style="padding-left:32px;color:var(--muted);font-size:12px">${esc(sr.cat)}</td>
-            ${keys.map((k) => colorCell(sr.byMonth.get(k) || 0, false)).join("")}
-            ${colorCell(sr.total, false)}
-          </tr>`);
+      const secColTotals = new Array(keys.length).fill(0);
+      let secTotal = 0;
+
+      for (const r of secRows) {
+        const collapsed  = state.multiCollapsed.has(r.row);
+        const hasSubRows = r.subRows && r.subRows.length > 0;
+        const toggleIcon = hasSubRows ? (collapsed ? "▶" : "▼") : "";
+        const toggleAttr = hasSubRows ? `data-toggle="${esc(r.row)}" style="cursor:pointer;user-select:none"` : "";
+
+        bodyRows.push(`<tr ${toggleAttr}>
+          <td style="padding-left:20px">
+            ${hasSubRows ? `<span class="mr-toggle" style="font-size:10px;margin-right:6px;color:var(--muted)">${toggleIcon}</span>` : `<span style="display:inline-block;width:16px"></span>`}${esc(r.row)}
+          </td>
+          ${keys.map((k, i) => {
+            const v = r.byMonth.get(k) || 0;
+            secColTotals[i] += v;
+            return fmtK(v, false);
+          }).join("")}
+          ${fmtK(r.total, false)}
+        </tr>`);
+
+        secTotal += r.total;
+
+        if (hasSubRows && !collapsed) {
+          for (const sr of r.subRows) {
+            bodyRows.push(`<tr>
+              <td style="padding-left:40px;color:var(--muted);font-size:12px">${esc(sr.cat)}</td>
+              ${keys.map((k) => fmtK(sr.byMonth.get(k) || 0, false)).join("")}
+              ${fmtK(sr.total, false)}
+            </tr>`);
+          }
         }
       }
+
+      // Section total
+      bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8;font-weight:700">
+        <td style="padding-left:20px">Total ${esc(secName)}</td>
+        ${secColTotals.map((t, i) => { grandColTotals[i] += t; return fmtK(t, true); }).join("")}
+        ${fmtK(secTotal, true)}
+      </tr>`);
+
+      grandTotal += secTotal;
     }
 
-    // Net cash flow row (signed sum across all top-level rows)
-    const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
-    const grandTotal = colTotals.reduce((a, b) => a + b, 0);
-    const netColor = grandTotal < 0 ? "color:var(--red)" : "color:var(--teal)";
-    const totalRow = `<tr style="background:#dbeafe;font-weight:700;border-top:2px solid #93c5fd">
-      <td style="color:var(--navy)">NET CASH FLOW</td>
-      ${colTotals.map((t) => `<td class="num" style="${t < 0 ? "color:var(--red)" : "color:var(--teal)"}">${money(t / 1000)}</td>`).join("")}
-      <td class="num" style="${netColor}">${money(grandTotal / 1000)}</td>
-    </tr>`;
+    // Net Inflow row
+    const netStyle = (v) => `${v < 0 ? "color:var(--red)" : "color:var(--teal)"};font-weight:700`;
+    bodyRows.push(`<tr style="background:#dbeafe;border-top:2px solid #93c5fd;font-weight:700">
+      <td style="color:var(--navy)">Net Inflow / (Outflow)</td>
+      ${grandColTotals.map((t) => `<td class="num" style="${netStyle(t)}">${money(t / 1000)}</td>`).join("")}
+      <td class="num" style="${netStyle(grandTotal)}">${money(grandTotal / 1000)}</td>
+    </tr>`);
 
-    tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyRows.join("")}${totalRow}</tbody>`;
+    const thHtml = [`Cash Flow (US$'000)`, ...keys, `Total US$'000`].map((h) => `<th>${esc(h)}</th>`).join("");
+    tbl.innerHTML = `<thead><tr>${thHtml}</tr></thead><tbody>${bodyRows.join("")}</tbody>`;
 
-    // Toggle click handler — re-delegate each render
     tbl.onclick = (e) => {
       const tr = e.target.closest("tr[data-toggle]");
       if (!tr) return;
@@ -1559,27 +1633,46 @@
     const colTotals = keys.map((k) => rows.reduce((s, r) => s + (r.byMonth.get(k) || 0), 0));
     const grandTotal = colTotals.reduce((a, b) => a + b, 0);
 
-    // Build flat data: header row + sub-rows + net total
+    const orderedRowNames2 = rows.map((r) => r.row);
+    const secMap2 = buildSectionMap(orderedRowNames2);
+    const rowByName2 = new Map(rows.map((r) => [r.row, r]));
     const dataRows = [];
-    for (const r of rows) {
-      dataRows.push({ label: r.row, vals: keys.map((k) => (r.byMonth.get(k) || 0) / 1000), total: r.total / 1000, level: "main" });
-      for (const sr of (r.subRows || [])) {
-        dataRows.push({ label: "  " + sr.cat, vals: keys.map((k) => (sr.byMonth.get(k) || 0) / 1000), total: sr.total / 1000, level: "sub" });
+    const gcTotals = new Array(keys.length).fill(0);
+    let gcTotal = 0;
+
+    for (const [secName, secRowNames] of secMap2) {
+      const secRows2 = secRowNames.map((n) => rowByName2.get(n)).filter(Boolean);
+      if (!secRows2.length) continue;
+      dataRows.push({ label: secName.toUpperCase(), vals: new Array(keys.length).fill(""), total: "", level: "section" });
+      const scTotals = new Array(keys.length).fill(0);
+      let scTotal = 0;
+      for (const r of secRows2) {
+        const vals = keys.map((k) => (r.byMonth.get(k) || 0) / 1000);
+        dataRows.push({ label: "  " + r.row, vals, total: r.total / 1000, level: "main" });
+        for (const sr of (r.subRows || [])) {
+          dataRows.push({ label: "    " + sr.cat, vals: keys.map((k) => (sr.byMonth.get(k) || 0) / 1000), total: sr.total / 1000, level: "sub" });
+        }
+        vals.forEach((v, i) => { scTotals[i] += v; });
+        scTotal += r.total / 1000;
       }
+      dataRows.push({ label: "Total " + secName, vals: scTotals, total: scTotal, level: "subtotal" });
+      scTotals.forEach((v, i) => { gcTotals[i] += v; });
+      gcTotal += scTotal;
     }
-    dataRows.push({ label: "NET CASH FLOW", vals: colTotals.map((t) => t / 1000), total: grandTotal / 1000, level: "total" });
+    dataRows.push({ label: "Net Inflow / (Outflow)", vals: gcTotals, total: gcTotal, level: "total" });
 
     const thHtml = headers.map((h) => `<th>${h}</th>`).join("");
     const bodyHtml = dataRows.map((r) => {
-      const style = r.level === "total"
-        ? ' style="font-weight:bold;background:#dbeafe"'
-        : r.level === "main"
-        ? ' style="font-weight:600;background:#edf3f8"'
-        : ' style="color:#5e6875"';
+      const style = r.level === "total"    ? ' style="font-weight:bold;background:#dbeafe"'
+                  : r.level === "section"  ? ' style="font-weight:bold;background:#1e3a5f;color:#fff"'
+                  : r.level === "subtotal" ? ' style="font-weight:bold;background:#edf3f8"'
+                  : r.level === "main"     ? ' style=""'
+                  :                          ' style="color:#5e6875"';
+      const fmtCell = (v) => v === "" ? `<td></td>` : `<td style="text-align:right">${Number(v).toFixed(1)}</td>`;
       const cells = [
         `<td>${r.label}</td>`,
-        ...r.vals.map((v) => `<td style="text-align:right">${v.toFixed(1)}</td>`),
-        `<td style="text-align:right;font-weight:${r.level !== "sub" ? "700" : "normal"}">${r.total.toFixed(1)}</td>`
+        ...r.vals.map(fmtCell),
+        r.total === "" ? `<td></td>` : `<td style="text-align:right;font-weight:${r.level !== "sub" ? "700" : "normal"}">${Number(r.total).toFixed(1)}</td>`
       ].join("");
       return `<tr${style}>${cells}</tr>`;
     }).join("");
