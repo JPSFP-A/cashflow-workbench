@@ -1,48 +1,55 @@
 (function () {
   const fmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-  // Base rows are derived from rules (user-defined), not hardcoded here.
-  // Returns unique base_case_row values:
-  //   1. Rule-defined order (from state.rules)
-  //   2. Sub-group lookup entries not already covered (sorted)
+  // Returns unique base_case_row values in canonical order:
+  //   1. Sections table order (sort_order ascending) — the authoritative ordering
+  //   2. Rule-defined rows not already covered
   //   3. Any extra from loaded records not already covered (sorted)
   function liveBaseRows() {
-    const fromRules    = [...new Set(state.rules.map((r) => r.base_case_row).filter(Boolean))];
-    const fromSubGroups = [...new Set(state.subGroups.map((sg) => sg.base_case_row).filter(Boolean))];
-    const fromRecords  = [...new Set(state.records.map((r) => r.base_case_row).filter(Boolean))];
-    const seen = new Set(fromRules);
-    const extraSg  = fromSubGroups.filter((r) => !seen.has(r) && (seen.add(r), true)).sort();
-    const extraRec = fromRecords.filter((r) => !seen.has(r)).sort();
-    return [...fromRules, ...extraSg, ...extraRec];
+    const fromSections = [...new Set(
+      state.sections.filter((s) => s.active !== false)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((s) => s.base_case_row)
+    )];
+    const fromRules   = [...new Set(state.rules.map((r) => r.base_case_row).filter(Boolean))];
+    const fromRecords = [...new Set(state.records.map((r) => r.base_case_row).filter(Boolean))];
+    const seen = new Set(fromSections);
+    const extraRules = fromRules.filter((r) => !seen.has(r) && (seen.add(r), true));
+    const extraRec   = fromRecords.filter((r) => !seen.has(r)).sort();
+    return [...fromSections, ...extraRules, ...extraRec];
   }
 
-  // Groups base_case_rows into sections using state.subGroups lookup.
-  // Returns Map<sectionLabel, string[]> in section-appearance order.
-  // Rows with no sub_group entry go into "(Other)".
+  // Groups base_case_rows into sections using state.sections lookup.
+  // Section order = min sort_order within each section.
+  // Rows with no section entry go into "(Other)".
   function buildSectionMap(baseRowKeys) {
-    const sections = new Map();
+    // Build section → [{br, sort_order}] map
+    const secRows = new Map();
     const assigned = new Set();
     for (const br of baseRowKeys) {
-      const sg = state.subGroups.find((s) => s.base_case_row === br && s.active !== false);
-      const sec = sg ? sg.sub_group : null;
-      if (sec) {
-        if (!sections.has(sec)) sections.set(sec, []);
-        sections.get(sec).push(br);
+      const entry = state.sections.find((s) => s.base_case_row === br && s.active !== false);
+      if (entry) {
+        if (!secRows.has(entry.section)) secRows.set(entry.section, []);
+        secRows.get(entry.section).push({ br, sort_order: entry.sort_order });
         assigned.add(br);
       }
     }
-    for (const br of baseRowKeys) {
-      if (!assigned.has(br)) {
-        if (!sections.has("(Other)")) sections.set("(Other)", []);
-        sections.get("(Other)").push(br);
-      }
-    }
-    return sections;
+    // Sort sections by their minimum sort_order, rows within each section by sort_order
+    const result = new Map();
+    [...secRows.entries()]
+      .sort((a, b) => Math.min(...a[1].map((r) => r.sort_order)) - Math.min(...b[1].map((r) => r.sort_order)))
+      .forEach(([sec, rows]) => {
+        result.set(sec, rows.sort((a, b) => a.sort_order - b.sort_order).map((r) => r.br));
+      });
+    // Unassigned rows
+    const other = baseRowKeys.filter((br) => !assigned.has(br));
+    if (other.length) result.set("(Other)", other);
+    return result;
   }
 
 
   const state = {
-    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [],
+    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [], sections: [],
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, multiCollapsed: new Set(), settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
@@ -791,7 +798,7 @@
   async function init() {
     if (!(await ensureSupabase())) return;
     setStatus("Connected.", "ok");
-    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings(), loadSubGroups()]);
+    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings(), loadSubGroups(), loadSections()]);
   }
 
   async function loadSubGroups() {
@@ -841,6 +848,66 @@
     if (error) return setStatus(error.message, "error");
     await loadSubGroups();
     setStatus("Deleted.", "ok");
+  }
+
+  async function loadSections() {
+    const { data, error } = await state.supabase
+      .from("cashflow_sections")
+      .select("id,base_case_row,section,sort_order,active")
+      .order("sort_order", { ascending: true });
+    if (error) return setStatus(error.message, "error");
+    state.sections = data || [];
+    refreshFormDropdowns();
+    renderSectionsAdmin();
+  }
+
+  function renderSectionsAdmin() {
+    const tbl = $("sectionsAdminTable");
+    if (!tbl) return;
+    if (!state.sections.length) {
+      tbl.innerHTML = "<thead><tr><th>Base Row</th><th>Section</th><th>Order</th><th></th></tr></thead><tbody><tr><td colspan='4' style='color:var(--muted);padding:14px'>No entries — add one below.</td></tr></tbody>";
+      return;
+    }
+    // Group by section for display
+    const rows = [...state.sections]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((s) => `<tr style="${s.active === false ? "opacity:.45;" : ""}">
+        <td>${esc(s.base_case_row)}</td>
+        <td>${esc(s.section)}</td>
+        <td class="num">${s.sort_order ?? "—"}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="window.cashflowApp.deleteSectionEntry('${esc(s.id)}')">✕</button></td>
+      </tr>`).join("");
+    tbl.innerHTML = `<thead><tr><th>Base Row</th><th>Section</th><th style="width:60px">Order</th><th style="width:50px"></th></tr></thead><tbody>${rows}</tbody>`;
+    // Refresh section name suggestions
+    const secSectionList = $("secSectionList");
+    if (secSectionList) {
+      const uniq = [...new Set(state.sections.map((s) => s.section))];
+      secSectionList.innerHTML = uniq.map((s) => `<option value="${esc(s)}">`).join("");
+    }
+  }
+
+  async function addSectionEntry() {
+    const baseRow = $("secBaseRow")  ? $("secBaseRow").value.trim()           : "";
+    const section = $("secSection") ? $("secSection").value.trim()            : "";
+    const order   = $("secSortOrder") ? parseInt($("secSortOrder").value, 10) || 0 : 0;
+    if (!baseRow || !section) return setStatus("Base row and section name are required.", "error");
+    const { error } = await state.supabase.from("cashflow_sections").upsert(
+      [{ base_case_row: baseRow, section, sort_order: order }], { onConflict: "base_case_row" }
+    );
+    if (error) return setStatus(error.message, "error");
+    if ($("secBaseRow"))    $("secBaseRow").value    = "";
+    if ($("secSection"))    $("secSection").value    = "";
+    if ($("secSortOrder"))  $("secSortOrder").value  = "";
+    await loadSections();
+    setStatus(`Saved: ${baseRow} → ${section}`, "ok");
+  }
+
+  async function deleteSectionEntry(id) {
+    if (!confirm("Remove this section entry?")) return;
+    const { error } = await state.supabase.from("cashflow_sections").delete().eq("id", id);
+    if (error) return setStatus(error.message, "error");
+    await loadSections();
+    setStatus("Removed.", "ok");
   }
 
   async function loadRules() {
@@ -1998,6 +2065,16 @@
     if ($("sgAddBtn")) {
       $("sgAddBtn").addEventListener("click", addSubGroupEntry);
     }
+    // Sections admin: add button
+    if ($("secAddBtn")) {
+      $("secAddBtn").addEventListener("click", addSectionEntry);
+    }
+    // Populate section datalist from existing sections
+    const secSectionList = $("secSectionList");
+    if (secSectionList) {
+      const uniq = [...new Set(state.sections.map((s) => s.section))];
+      secSectionList.innerHTML = uniq.map((s) => `<option value="${esc(s)}">`).join("");
+    }
     // Drill-down: click any row in grouped base table to load detail on the right
     if ($("groupedBaseTable")) {
       $("groupedBaseTable").addEventListener("click", (e) => {
@@ -2046,5 +2123,5 @@
   bindUi();
   init();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry };
 })();

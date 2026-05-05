@@ -936,6 +936,28 @@
         </div>
 
         <div class="panel" style="margin-top:16px">
+          <div class="panel-head">Cashflow Sections</div>
+          <p class="hint" style="padding:0 16px 10px">Maps each Base Case Row to its section heading (e.g. Receipts, Disbursements). Sort order controls row order within the section — lower numbers appear first. The section with the lowest sort_order number appears first in the report.</p>
+          <div style="display:flex;gap:8px;align-items:flex-end;padding:0 16px 12px;flex-wrap:wrap">
+            <div class="form-field" style="margin:0;min-width:200px">
+              <label style="font-size:12px;font-weight:600">Base Row</label>
+              <input id="secBaseRow" list="sgBaseRowList" placeholder="Select or type new…" autocomplete="off" style="height:32px;font-size:13px">
+            </div>
+            <div class="form-field" style="margin:0;min-width:160px">
+              <label style="font-size:12px;font-weight:600">Section</label>
+              <input id="secSection" list="secSectionList" placeholder="e.g. Receipts" autocomplete="off" style="height:32px;font-size:13px">
+              <datalist id="secSectionList"></datalist>
+            </div>
+            <div class="form-field" style="margin:0;width:70px">
+              <label style="font-size:12px;font-weight:600">Sort</label>
+              <input id="secSortOrder" type="number" placeholder="0" style="height:32px;font-size:13px">
+            </div>
+            <button class="btn btn-teal btn-sm" id="secAddBtn" style="height:32px">+ Save</button>
+          </div>
+          <div class="tablebox"><table id="sectionsAdminTable"></table></div>
+        </div>
+
+        <div class="panel" style="margin-top:16px">
           <div class="panel-head">Sub Group Lookup</div>
           <p class="hint" style="padding:0 16px 10px">Maps each Base Case Row to its Sub Group options shown in rule forms. Add or remove entries here.</p>
           <div style="display:flex;gap:8px;align-items:flex-end;padding:0 16px 12px;flex-wrap:wrap">
