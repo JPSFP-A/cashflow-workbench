@@ -132,14 +132,18 @@
   }
 
   function fixed(line, spans) { return spans.map(([s, e]) => line.slice(s, e).trim()); }
+  // Restore leading zeros trimmed by right-aligned fixed-width columns.
+  // Only pads purely numeric values; leaves alphanumeric codes untouched.
+  function zeroPad(s, width) { const t = String(s || "").trim(); return /^\d+$/.test(t) && t ? t.padStart(width, "0") : t; }
 
   // Extract segments from Oracle GL account code e.g. "01.001.12345.10200"
-  // Seg 1 = entity, Seg 2 = cost centre, Seg 3 = cost_item, Seg 4 = FPC / project
+  // Seg 1 = entity, Seg 2 = cost centre, Seg 3 = cost_item (5 chars), Seg 4 = FPC (5 chars)
+  // Do NOT strip leading zeros — codes are fixed-width identifiers.
   function accountParts(account) {
     const p = String(account || "").split(".");
     return {
-      cost_item: (p[2] || "").replace(/^0+/, "") || "0",  // segment 3
-      fpc:       (p[3] || "").replace(/^0+/, "") || ""    // segment 4 = FPC
+      cost_item: p[2] || "",   // segment 3 — keep leading zeros
+      fpc:       p[3] || ""    // segment 4 — keep leading zeros
     };
   }
 
@@ -165,7 +169,12 @@
       const category_code = vals[1];
       const batch_name    = vals[2];
       const je_name       = vals[3];
-      const account       = vals[4];
+      // GL account is fixed-width and may be wider than the column boundary.
+      // Read the full dotted account string from the raw line starting at the
+      // account column position so all segments (e.g. 01.9999.0999.13101.…) are captured.
+      const acctStart     = spans[4][0];
+      const acctMatch     = line.slice(acctStart).match(/^(\d+(?:\.\d+)+)/);
+      const account       = acctMatch ? acctMatch[1] : vals[4];
       const debit         = vals[n - 2];
       const credit        = vals[n - 1];
 
@@ -243,9 +252,13 @@
       const vals = fixed(line.padEnd(352), spans);
       const item = {};
       names.forEach((n, i) => { item[n] = vals[i] || ""; });
+      // AP report right-aligns numeric codes with spaces — restore leading zeros.
+      // ci span = 4 chars [5,9]; fpc span = 5 chars [10,15]
+      item.ci  = zeroPad(item.ci,  4);
+      item.fpc = zeroPad(item.fpc, 5);
       const amount = Math.abs(num(item.amount_usd || item.amount_original));
       if (!item.cc || !item.fpc || !item.vendor || !amount) continue;
-      rows.push({ ...item, record_key: `${name}-${rows.length + 1}`, data_source: "Invoice Payments", source_file: name, role: "Outflow", source: "Payables", category_code: "Payments", amount, signed_amount: -amount, cost_item: String(item.ci || "").replace(/^0+/, "") || "0", debit_usd: 0, credit_usd: amount });
+      rows.push({ ...item, record_key: `${name}-${rows.length + 1}`, data_source: "Invoice Payments", source_file: name, role: "Outflow", source: "Payables", category_code: "Payments", amount, signed_amount: -amount, cost_item: item.ci, debit_usd: 0, credit_usd: amount });
     }
     return rows;
   }
