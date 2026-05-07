@@ -264,10 +264,20 @@
   }
 
   function inRange(value, text) {
-    const v = parseInt(String(value || "").replace(/^0+/, ""), 10);
-    if (Number.isNaN(v)) return false;
-    const parts = String(text || "").split("-").map((x) => parseInt(x, 10));
-    return parts.length === 2 && !parts.some(Number.isNaN) ? v >= parts[0] && v <= parts[1] : false;
+    const raw = String(text || "");
+    const sep = raw.indexOf("-", 1); // skip leading hyphen in case of negative numbers
+    if (sep < 1) return false;
+    const lo = raw.slice(0, sep).trim();
+    const hi = raw.slice(sep + 1).trim();
+    // Numeric range
+    const nv = parseFloat(String(value || ""));
+    const nLo = parseFloat(lo), nHi = parseFloat(hi);
+    if (!Number.isNaN(nv) && !Number.isNaN(nLo) && !Number.isNaN(nHi)) {
+      return nv >= nLo && nv <= nHi;
+    }
+    // Alphanumeric: lexicographic comparison (works for fixed-width codes like W0000216)
+    const sv = String(value || "").trim().toUpperCase();
+    return sv >= lo.toUpperCase() && sv <= hi.toUpperCase();
   }
 
   // Evaluate a single condition (type + value) against a record row.
