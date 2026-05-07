@@ -534,8 +534,6 @@
     table("baseDetailTable", [
       { label: "Source",        key: "data_source" },
       { label: "CB Source",     key: "source",          render: (r) => r.source ? esc(r.source) : "" },
-      { label: "CB Category",   key: "category_code",   render: (r) => r.category_code ? esc(r.category_code) : "" },
-      { label: "Account",       key: "account",         render: (r) => r.account ? esc(r.account) : "" },
       { label: "Cost Item",     key: "cost_item",       render: (r) => r.cost_item ? esc(r.cost_item) : "" },
       { label: "FPC",           key: "fpc" },
       { label: "Vendor",        key: "vendor" },
@@ -1735,51 +1733,66 @@
     if (!tbl) return;
     if (!state.records.length) { tbl.innerHTML = ""; return; }
 
-    // Group: data_source → group_key → { amount, lines }
-    const sources = ["Cashbook", "Invoice Payments"];
-    const bySource = new Map();
+    // Columns = base rows present in current records, in canonical order
+    const presentBrs = new Set(state.records.map((r) => r.base_case_row).filter(Boolean));
+    const colBrs = liveBaseRows().filter((br) => presentBrs.has(br));
+    const colCount = colBrs.length + 2; // label + base-row cols + Total
+
+    // Pivot: source → group_key → base_case_row → signed_amount sum
+    const pivotData  = new Map(); // src → Map(grp → Map(br → amt))
+    const srcTotals  = new Map(); // src → Map(br → amt)
     for (const r of state.records) {
       const src = r.data_source === "Invoice Payments" ? "Invoice Payments" : "Cashbook";
       const grp = r.data_source === "Invoice Payments"
         ? (r.jobno  || "(No Job #)")
         : (r.source || "(No CB Source)");
-      if (!bySource.has(src)) bySource.set(src, new Map());
-      const grpMap = bySource.get(src);
-      const cur = grpMap.get(grp) || { amount: 0, lines: 0 };
-      cur.amount += Number(r.signed_amount || 0);
-      cur.lines  += 1;
-      grpMap.set(grp, cur);
+      const br  = r.base_case_row || "(Unmapped)";
+      const amt = Number(r.signed_amount || 0);
+      if (!pivotData.has(src)) pivotData.set(src, new Map());
+      if (!pivotData.get(src).has(grp)) pivotData.get(src).set(grp, new Map());
+      const brMap = pivotData.get(src).get(grp);
+      brMap.set(br, (brMap.get(br) || 0) + amt);
+      if (!srcTotals.has(src)) srcTotals.set(src, new Map());
+      srcTotals.get(src).set(br, (srcTotals.get(src).get(br) || 0) + amt);
     }
 
+    const thCols = colBrs.map((br) => `<th class="num" style="font-size:10.5px;white-space:normal;max-width:90px">${esc(br)}</th>`).join("");
+    const thead  = `<thead><tr><th>Job # / CB Source</th>${thCols}<th class="num">Total</th></tr></thead>`;
+
     const bodyRows = [];
-    for (const src of sources) {
-      const grpMap = bySource.get(src);
+    const numCell  = (v, bold) => {
+      const s = v < 0 ? "color:var(--red)" : "";
+      const w = bold ? "font-weight:700;" : "";
+      return `<td class="num" style="${w}${s}">${v === 0 ? "" : money(v / 1000)}</td>`;
+    };
+
+    for (const src of ["Cashbook", "Invoice Payments"]) {
+      const grpMap = pivotData.get(src);
       if (!grpMap) continue;
 
       bodyRows.push(`<tr style="background:#1e3a5f">
-        <td colspan="3" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(src.toUpperCase())}</td>
+        <td colspan="${colCount}" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(src.toUpperCase())}</td>
       </tr>`);
 
-      let srcTotal = 0;
-      const sorted = [...grpMap.entries()].sort((a, b) => Math.abs(b[1].amount) - Math.abs(a[1].amount));
-      for (const [grp, d] of sorted) {
-        srcTotal += d.amount;
-        const c = d.amount < 0 ? "var(--red)" : "inherit";
-        bodyRows.push(`<tr>
-          <td style="padding-left:20px">${esc(grp)}</td>
-          <td class="num" style="color:${c}">${money(d.amount / 1000)}</td>
-          <td class="num" style="color:var(--muted)">${d.lines}</td>
-        </tr>`);
+      const sorted = [...grpMap.entries()]
+        .map(([grp, brMap]) => ({ grp, brMap, total: [...brMap.values()].reduce((s, v) => s + v, 0) }))
+        .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+
+      for (const { grp, brMap, total } of sorted) {
+        const cells = colBrs.map((br) => numCell(brMap.get(br) || 0, false)).join("");
+        bodyRows.push(`<tr><td style="padding-left:20px">${esc(grp)}</td>${cells}${numCell(total, true)}</tr>`);
       }
-      const tc = srcTotal < 0 ? "var(--red)" : "inherit";
+
+      // Source total row
+      const stMap   = srcTotals.get(src) || new Map();
+      const stTotal = [...stMap.values()].reduce((s, v) => s + v, 0);
+      const stCells = colBrs.map((br) => numCell(stMap.get(br) || 0, true)).join("");
       bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
-        <td style="padding-left:20px;font-weight:700">Total ${esc(src)}</td>
-        <td class="num" style="font-weight:700;color:${tc}">${money(srcTotal / 1000)}</td>
-        <td class="num"></td>
+        <td style="padding-left:20px;font-weight:700">Total ${esc(src)}</td>${stCells}${numCell(stTotal, true)}
       </tr>`);
     }
 
-    tbl.innerHTML = `<thead><tr><th>Job # / CB Source</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${bodyRows.join("")}</tbody>`;
+    tbl.innerHTML = `${thead}<tbody>${bodyRows.join("")}</tbody>`;
   }
 
   // ── Job # breakdown — Multi-Month tab ───────────────────────────────
