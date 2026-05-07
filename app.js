@@ -1733,9 +1733,8 @@
     if (!tbl) return;
     if (!state.records.length) { tbl.innerHTML = ""; return; }
 
-    // Columns = base rows present in current records, in canonical order
-    const presentBrs = new Set(state.records.map((r) => r.base_case_row).filter(Boolean));
-    const colBrs = liveBaseRows().filter((br) => presentBrs.has(br));
+    // Columns = ALL canonical base rows so nothing is ever hidden
+    const colBrs = liveBaseRows();
     const colCount = colBrs.length + 2; // label + base-row cols + Total
 
     // Pivot: source → group_key → base_case_row → signed_amount sum
