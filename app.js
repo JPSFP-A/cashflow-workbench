@@ -546,6 +546,7 @@
       { label: "CB Source",     key: "source",          render: (r) => r.source ? esc(r.source) : "" },
       { label: "Cost Item",     key: "cost_item",       render: (r) => r.cost_item ? esc(r.cost_item) : "" },
       { label: "FPC",           key: "fpc" },
+      { label: "Job #",         key: "jobno" },
       { label: "Vendor",        key: "vendor" },
       { label: "Pay Group",     key: "pay_group" },
       { label: "Mapped Cat",    key: "cashbook_category" },
