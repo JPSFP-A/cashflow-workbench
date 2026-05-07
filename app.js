@@ -1775,7 +1775,7 @@
       </tr>`);
 
       const sorted = [...grpMap.entries()]
-        .map(([grp, brMap]) => ({ grp, brMap, total: [...brMap.values()].reduce((s, v) => s + v, 0) }))
+        .map(([grp, brMap]) => ({ grp, brMap, total: colBrs.reduce((s, br) => s + (brMap.get(br) || 0), 0) }))
         .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
 
       for (const { grp, brMap, total } of sorted) {
@@ -1783,9 +1783,9 @@
         bodyRows.push(`<tr><td style="padding-left:20px">${esc(grp)}</td>${cells}${numCell(total, true)}</tr>`);
       }
 
-      // Source total row
+      // Source total row — sum only the visible colBrs so Total = sum of columns
       const stMap   = srcTotals.get(src) || new Map();
-      const stTotal = [...stMap.values()].reduce((s, v) => s + v, 0);
+      const stTotal = colBrs.reduce((s, br) => s + (stMap.get(br) || 0), 0);
       const stCells = colBrs.map((br) => numCell(stMap.get(br) || 0, true)).join("");
       bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
         <td style="padding-left:20px;font-weight:700">Total ${esc(src)}</td>${stCells}${numCell(stTotal, true)}
