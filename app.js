@@ -586,11 +586,11 @@
 
   function renderOutflows() {
     const heads = [
-      { label: "Group", key: "name" },
-      { label: "US$ Amount", key: "amount", num: true, render: (r) => money(r.amount) },
-      { label: "US$’000", key: "amount", num: true, render: (r) => money(r.amount / 1000) },
-      { label: "Lines", key: "lines", num: true },
-      { label: "Unmapped", key: "unmapped", num: true, render: (r) => r.unmapped ? `<span class="bad">${r.unmapped}</span>` : "0" }
+      { label: "Group",      key: "name" },
+      { label: "Net (US$)",  key: "amount", num: true, render: (r) => `<span style="color:${r.amount < 0 ? "var(--red)" : "inherit"}">${money(r.amount)}</span>` },
+      { label: "Net (000s)", key: "amount", num: true, render: (r) => `<span style="color:${r.amount < 0 ? "var(--red)" : "inherit"}">${money(r.amount / 1000)}</span>` },
+      { label: "Lines",      key: "lines",    num: true },
+      { label: "Unmapped",   key: "unmapped", num: true, render: (r) => r.unmapped ? `<span class="bad">${r.unmapped}</span>` : "0" }
     ];
     const addTotals = (id, rows) => {
       const tot = rows.reduce((acc, r) => { acc.amount += r.amount; acc.lines += r.lines; acc.unmapped += r.unmapped; return acc; }, { amount: 0, lines: 0, unmapped: 0 });
@@ -606,11 +606,12 @@
       </tr>`;
       tbl.appendChild(tfoot);
     };
-    const apRows = state.records.filter((r) => r.data_source === "Invoice Payments");
+    const apRows       = state.records.filter((r) => r.data_source === "Invoice Payments");
     const cashbookRows = state.records.filter((r) => r.data_source === "Cashbook");
-    const grpBase = group(apRows, "base_case_row");
-    const grpCat  = group(apRows, "cashbook_category");
-    const grpCb   = group(cashbookRows, "cashbook_category");
+    // signed=true → uses signed_amount so credits net off against debits
+    const grpBase = group(apRows,       "base_case_row",     true);
+    const grpCat  = group(apRows,       "cashbook_category", true);
+    const grpCb   = group(cashbookRows, "cashbook_category", true);
     table("outflowBaseTable",    heads, grpBase); addTotals("outflowBaseTable",    grpBase);
     table("outflowCategoryTable",heads, grpCat);  addTotals("outflowCategoryTable",grpCat);
     table("cashbookCheckTable",  heads, grpCb);   addTotals("cashbookCheckTable",  grpCb);
