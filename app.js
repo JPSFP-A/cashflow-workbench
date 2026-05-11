@@ -592,11 +592,28 @@
       { label: "Lines", key: "lines", num: true },
       { label: "Unmapped", key: "unmapped", num: true, render: (r) => r.unmapped ? `<span class="bad">${r.unmapped}</span>` : "0" }
     ];
+    const addTotals = (id, rows) => {
+      const tot = rows.reduce((acc, r) => { acc.amount += r.amount; acc.lines += r.lines; acc.unmapped += r.unmapped; return acc; }, { amount: 0, lines: 0, unmapped: 0 });
+      const c = tot.amount < 0 ? "color:var(--red)" : "";
+      const tbl = $(id);
+      const tfoot = document.createElement("tfoot");
+      tfoot.innerHTML = `<tr style="font-weight:700;border-top:2px solid #c9d8e8;background:#edf3f8">
+        <td>Total</td>
+        <td class="num" style="${c}">${money(tot.amount)}</td>
+        <td class="num" style="${c}">${money(tot.amount / 1000)}</td>
+        <td class="num">${tot.lines}</td>
+        <td class="num">${tot.unmapped || "0"}</td>
+      </tr>`;
+      tbl.appendChild(tfoot);
+    };
     const apRows = state.records.filter((r) => r.data_source === "Invoice Payments");
     const cashbookRows = state.records.filter((r) => r.data_source === "Cashbook");
-    table("outflowBaseTable", heads, group(apRows, "base_case_row"));
-    table("outflowCategoryTable", heads, group(apRows, "cashbook_category"));
-    table("cashbookCheckTable", heads, group(cashbookRows, "cashbook_category"));
+    const grpBase = group(apRows, "base_case_row");
+    const grpCat  = group(apRows, "cashbook_category");
+    const grpCb   = group(cashbookRows, "cashbook_category");
+    table("outflowBaseTable",    heads, grpBase); addTotals("outflowBaseTable",    grpBase);
+    table("outflowCategoryTable",heads, grpCat);  addTotals("outflowCategoryTable",grpCat);
+    table("cashbookCheckTable",  heads, grpCb);   addTotals("cashbookCheckTable",  grpCb);
   }
 
   function renderExceptions() {
