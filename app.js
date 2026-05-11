@@ -1563,10 +1563,8 @@
         if (!sums.has(r.base_case_row)) sums.set(r.base_case_row, new Map());
         const byMonth = sums.get(r.base_case_row);
         byMonth.set(mKey, (byMonth.get(mKey) || 0) + amt);
-        // sub-level — use pay_group for AP, sub_group for cashbook
-        const subKey = r.data_source === "Invoice Payments"
-          ? (r.pay_group || "(No Pay Group)")
-          : (r.sub_group || r.cashbook_category || "(Uncategorised)");
+        // sub-level — same cashbook_category as single-month view
+        const subKey = r.cashbook_category || "(Uncategorised)";
         if (!subSums.has(r.base_case_row)) subSums.set(r.base_case_row, new Map());
         const catMap = subSums.get(r.base_case_row);
         if (!catMap.has(subKey)) catMap.set(subKey, new Map());
