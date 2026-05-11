@@ -551,7 +551,8 @@
       { label: "Pay Group",     key: "pay_group" },
       { label: "Mapped Cat",    key: "cashbook_category" },
       { label: "Description",   key: "description" },
-      { label: "Amount",        key: "amount", num: true, render: (r) => money(r.amount) },
+      { label: "Dr/Cr",         key: "signed_amount", num: false, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
+      { label: "Amount",        key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(Math.abs(s))}</span>`; } },
       { label: "Rule",          key: "mapping_rule" }
     ], rows);
   }
