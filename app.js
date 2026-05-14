@@ -391,14 +391,15 @@
   }
 
   function renderKpis() {
-    let cd = 0; let cc = 0; let ap = 0; let unmapped = 0; let norow = 0;
+    let cd = 0; let cc = 0; let apNet = 0; let unmapped = 0; let norow = 0;
     state.records.forEach((r) => {
       if (r.role === "Inflow") cd += Number(r.amount || 0);
       else if (r.role === "Cashbook Credit") cc += Number(r.amount || 0);
-      else ap += Number(r.amount || 0);
+      else apNet += Number(r.signed_amount ?? -r.amount ?? 0); // signed: credits positive (reduce outflow), invoices negative
       if (!r.mapped) unmapped += 1;
       else if (!r.base_case_row) norow += 1;
     });
+    const ap = Math.abs(apNet); // net outflow (credits netted off)
     const exc = unmapped + norow;
     const badge = $("excBadge");
     if (badge) { badge.textContent = exc || ""; badge.className = "tab-badge" + (exc ? " show" : ""); }
