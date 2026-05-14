@@ -256,9 +256,12 @@
       // ci span = 4 chars [5,9]; fpc span = 5 chars [10,15]
       item.ci  = zeroPad(item.ci,  4);
       item.fpc = zeroPad(item.fpc, 5);
-      const amount = Math.abs(num(item.amount_usd || item.amount_original));
+      const raw_amt = num(item.amount_usd || item.amount_original);
+      const amount  = Math.abs(raw_amt);
       if (!item.cc || !item.fpc || !item.vendor || !amount) continue;
-      rows.push({ ...item, record_key: `${name}-${rows.length + 1}`, data_source: "Invoice Payments", source_file: name, role: "Outflow", source: "Payables", category_code: "Payments", amount, signed_amount: -amount, cost_item: item.ci, debit_usd: 0, credit_usd: amount });
+      // signed_amount: normal invoice → negative (outflow); credit memo (raw_amt < 0) → positive (reduces outflow)
+      const signed_amount = -raw_amt;
+      rows.push({ ...item, record_key: `${name}-${rows.length + 1}`, data_source: "Invoice Payments", source_file: name, role: "Outflow", source: "Payables", category_code: "Payments", amount, signed_amount, cost_item: item.ci, debit_usd: 0, credit_usd: amount });
     }
     return rows;
   }
@@ -766,6 +769,51 @@
     await loadRules();
   }
 
+  function renderAllEntries() {
+    const tbl  = $("allEntriesTable");
+    const meta = $("allEntriesMeta");
+    if (!tbl) return;
+
+    const q      = norm(($("allEntriesSearch")  || {}).value || "");
+    const srcF   = (($("allEntriesSource")  || {}).value) || "all";
+    const mapF   = (($("allEntriesMapped") || {}).value) || "all";
+
+    let rows = state.records.filter((r) => {
+      if (srcF === "ap"       && r.data_source !== "Invoice Payments") return false;
+      if (srcF === "cashbook" && r.data_source !== "Cashbook")         return false;
+      if (mapF === "mapped"   && !r.mapped)   return false;
+      if (mapF === "unmapped" && r.mapped)    return false;
+      if (q) {
+        const hay = norm([r.vendor, r.fpc, r.cost_item, r.jobno, r.pay_group,
+          r.description, r.cashbook_category, r.base_case_row, r.mapping_rule,
+          r.source, r.data_source].join(" "));
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const total = rows.length;
+    rows = rows.slice(0, 2000);
+    if (meta) meta.textContent = `${total.toLocaleString()} records${total > 2000 ? " (showing first 2,000)" : ""}`;
+
+    table("allEntriesTable", [
+      { label: "Source",    key: "data_source" },
+      { label: "CB Source", key: "source",          render: (r) => r.source ? esc(r.source) : "" },
+      { label: "FPC",       key: "fpc" },
+      { label: "Cost Item", key: "cost_item",        render: (r) => r.cost_item ? esc(r.cost_item) : "" },
+      { label: "Job #",     key: "jobno" },
+      { label: "Vendor",    key: "vendor" },
+      { label: "Pay Group", key: "pay_group" },
+      { label: "Description", key: "description" },
+      { label: "Dr/Cr",    key: "signed_amount", render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
+      { label: "Net (US$)", key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(s)}</span>`; } },
+      { label: "Category",  key: "cashbook_category" },
+      { label: "Base Row",  key: "base_case_row" },
+      { label: "Rule",      key: "mapping_rule" },
+      { label: "Mapped",    key: "mapped", render: (r) => r.mapped ? '<span style="color:var(--teal)">✓</span>' : '<span class="bad">✗</span>' }
+    ], rows);
+  }
+
   function renderAudit() {
     table("auditTable", [
       { label: "When", key: "created_at", render: (r) => esc(fmtDateTime(r.created_at)) },
@@ -784,8 +832,9 @@
     return btn ? btn.dataset.tab : "outflows";
   }
   function renderDataTab(name) {
-    if (name === "outflows") { renderOutflows(); pendingRender.delete("outflows"); }
-    else if (name === "base")  { renderGroupedBase(); renderBaseDetail(); renderJobBreakdown(); pendingRender.delete("base"); }
+    if (name === "outflows")    { renderOutflows(); pendingRender.delete("outflows"); }
+    else if (name === "allentries") { renderAllEntries(); pendingRender.delete("allentries"); }
+    else if (name === "base")   { renderGroupedBase(); renderBaseDetail(); renderJobBreakdown(); pendingRender.delete("base"); }
     else if (name === "exceptions") {
       renderExceptions();
       pendingRender.delete("exceptions");
@@ -799,6 +848,7 @@
     renderMonthBar();
     renderKpis();
     pendingRender.add("outflows");
+    pendingRender.add("allentries");
     pendingRender.add("base");
     pendingRender.add("exceptions");
     renderDataTab(activeTabName());
@@ -2088,6 +2138,13 @@
     $("exportReportBtn").addEventListener("click", exportReport);
     if ($("exportOutflowsBtn"))   $("exportOutflowsBtn").addEventListener("click", exportOutflows);
     if ($("exportExceptionsBtn")) $("exportExceptionsBtn").addEventListener("click", exportExceptions);
+    if ($("allEntriesSearch"))  $("allEntriesSearch").addEventListener("input",  renderAllEntries);
+    if ($("allEntriesSource"))  $("allEntriesSource").addEventListener("change", renderAllEntries);
+    if ($("allEntriesMapped"))  $("allEntriesMapped").addEventListener("change", renderAllEntries);
+    if ($("exportAllEntriesBtn")) $("exportAllEntriesBtn").addEventListener("click", () => {
+      const monthKey = currentMonthKey() || "export";
+      download(`cashflow_all_entries_${monthKey}.xls`, xlsWrap(`All Entries — ${monthKey}`, monthKey, tableToCleanHtml($("allEntriesTable"))), "application/vnd.ms-excel");
+    });
     if ($("exportBaseBtn"))       $("exportBaseBtn").addEventListener("click", exportBase);
     if ($("exportBaseGroupBtn"))  $("exportBaseGroupBtn").addEventListener("click", exportBaseGroup);
     if ($("exportRulesXlsBtn"))   $("exportRulesXlsBtn").addEventListener("click", exportRulesXls);

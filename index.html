@@ -611,6 +611,7 @@
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="datamanager">📁 Data Manager</button>
         <button class="tab-btn" data-tab="outflows">📤 Validation</button>
+        <button class="tab-btn" data-tab="allentries">📝 All Entries</button>
         <button class="tab-btn" data-tab="exceptions">🔍 Map Exceptions <span class="tab-badge" id="excBadge"></span></button>
         <button class="tab-btn" data-tab="base">📋 Base Case</button>
         <button class="tab-btn" data-tab="rules">⚙ Rules</button>
@@ -688,6 +689,26 @@
             <div class="tablebox"><table id="cashbookCheckTable"></table></div>
           </div>
         </div>
+      </div>
+
+      <!-- ── All Entries ── -->
+      <div class="tab-panel" id="allentries">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input id="allEntriesSearch" placeholder="Search vendor, FPC, job#, description, rule…" style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px">
+          <select id="allEntriesSource" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px">
+            <option value="all">All Sources</option>
+            <option value="ap">AP (Invoice Payments)</option>
+            <option value="cashbook">Cashbook</option>
+          </select>
+          <select id="allEntriesMapped" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px">
+            <option value="all">All Records</option>
+            <option value="mapped">Mapped Only</option>
+            <option value="unmapped">Unmapped Only</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="exportAllEntriesBtn">⬇ Excel</button>
+          <span id="allEntriesMeta" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div class="tablebox tall"><table id="allEntriesTable"></table></div>
       </div>
 
       <!-- ── Map Exceptions ── -->
