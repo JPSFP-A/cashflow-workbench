@@ -474,6 +474,13 @@
     .cwb-sidebar .sb-user-role { font-size: 10px; color: #5A6FA8; }
     .cwb-right { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
 
+    /* ── Shimmer skeleton ──────────────────────────────────────────── */
+    @keyframes cwb-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .skel-row td div { height:11px; border-radius:4px; background:linear-gradient(90deg,#e2e8f0 25%,#f0f4f9 50%,#e2e8f0 75%); background-size:200% 100%; animation:cwb-shimmer 1.4s infinite; }
+
+    /* ── Tooltip term ──────────────────────────────────────────────── */
+    .cwb-tip { border-bottom:1px dashed var(--muted); cursor:help; }
+
     /* ── Responsive ───────────────────────────────────────────────── */
     @media (max-width: 1100px) {
       .grid-3, .grid-2 { grid-template-columns: 1fr; }
@@ -495,7 +502,7 @@
   ═══════════════════════════════════════════════════════════════ -->
   <div id="appSwitcher" style="display:none;height:38px;background:#060c18;border-bottom:1px solid rgba(255,255,255,0.05);align-items:center;padding:0 12px;gap:4px;flex-shrink:0;z-index:200;position:relative;">
     <a href="https://jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">📊 FP&amp;A</a>
-    <a href="https://propel.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">🏗 Propel</a>
+    <a href="https://om.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ O&amp;M</a>
     <a href="https://sales.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ Sales</a>
     <a href="#" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;background:rgba(245,158,11,0.1);color:#FBB024;border:1px solid rgba(245,158,11,0.25);text-decoration:none;">💧 Cashflow</a>
     <span style="margin-left:auto;font-size:10px;color:#3B4F8C;">⚡ JPS Financial Systems</span>
@@ -1125,6 +1132,10 @@
       window.APP_CONFIG.supabaseAnonKey
     );
   </script>
+  <script src="./jps-monitor.js"></script>
+  <script>
+    JpsMonitor.init({ getClient: () => window.APP_SUPABASE_CLIENT, appName: 'cashflow' });
+  </script>
   <script src="./app.js"></script>
   <script>
     // ── Theme management ──────────────────────────────────────────
@@ -1204,6 +1215,28 @@
       // Use the shared client created before app.js — same instance = same auth session
       const sb = window.APP_SUPABASE_CLIENT;
 
+      // ── Presence ────────────────────────────────────────────────────────────
+      let _cwbPresenceCh = null;
+      function _cwbInitPresence(client, email, role) {
+        if (!client || document.getElementById('_onlinePill')) return;
+        const pill = document.createElement('span');
+        pill.id = '_onlinePill';
+        pill.style.cssText = 'font-size:10px;font-weight:600;padding:2px 9px;border-radius:10px;background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2);white-space:nowrap;cursor:default;user-select:none;display:none';
+        const anchor = document.getElementById('userBadge') || document.querySelector('.sidebar') || document.querySelector('header');
+        if (anchor) anchor.insertAdjacentElement('afterend', pill);
+        _cwbPresenceCh = client.channel('jps:presence', { config: { presence: { key: email } } });
+        _cwbPresenceCh.on('presence', { event: 'sync' }, () => {
+          const all    = Object.values(_cwbPresenceCh.presenceState()).flat();
+          const others = all.filter(p => p.email !== email);
+          pill.style.display = 'inline-block';
+          pill.textContent   = others.length ? `● ${all.length} online` : '● just you';
+          pill.title = others.length ? 'Also online:\n' + others.map(u => `  ${u.email} — ${u.app}`).join('\n') : 'No one else is logged in';
+        }).subscribe(async s => {
+          if (s === 'SUBSCRIBED') await _cwbPresenceCh.track({ email, app: 'Cash Workbench', role: role || 'viewer', since: new Date().toISOString() });
+        });
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       function initials(name) {
         return name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join("");
       }
@@ -1257,7 +1290,19 @@
           .eq("id", userId)
           .maybeSingle();
 
+        if (window.JpsMonitor) JpsMonitor.setUser(userId, profile?.full_name || email);
         launch(profile?.full_name || email);
+        _cwbInitPresence(sb, email, access?.role || 'viewer');
+        // Login audit — write to unified fpa_audit_log
+        sb.from('fpa_audit_log').insert({
+          user_id:   userId,
+          user_name: profile?.full_name || email,
+          user_role: access?.role || '—',
+          app:       'cash',
+          action:    'login',
+          target:    'session',
+          new_val:   JSON.stringify({ email, role: access?.role }),
+        }).catch(() => {});
         return true;
       }
 

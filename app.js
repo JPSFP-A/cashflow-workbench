@@ -57,6 +57,9 @@
     baseDetailFilter: null        // {base_case_row, cashbook_category} for drill-down
   };
 
+  const _CY = new Date().getFullYear();
+  const _PY = _CY - 1;
+
   // Returns the name typed in the header field, falling back to "Anonymous"
   function userName() { return ($("nameInput") && $("nameInput").value.trim()) || "Anonymous"; }
 
@@ -65,6 +68,62 @@
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
   const norm = (v) => String(v || "").trim().toUpperCase();
   const timestamp = () => new Date().toISOString();
+
+  // ── Debounce ─────────────────────────────────────────────────────────────
+  function debounce(fn, ms) {
+    let t;
+    return function(...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), ms); };
+  }
+
+  // ── TTL cache ─────────────────────────────────────────────────────────────
+  const _ttl = {};
+  async function ttlFetch(key, ms, fn) {
+    const now = Date.now();
+    if (_ttl[key] && now - _ttl[key].ts < ms) return _ttl[key].val;
+    const val = await fn();
+    _ttl[key] = { ts: now, val };
+    return val;
+  }
+
+  // ── Skeleton loading ──────────────────────────────────────────────────────
+  function skelRows(n, pattern) {
+    const cols = (pattern || ['70%', '40%', '60%', '50%']);
+    return '<tbody>' + Array.from({ length: n }, () =>
+      '<tr class="skel-row">' + cols.map(w =>
+        '<td><div style="height:11px;border-radius:4px;background:linear-gradient(90deg,#e2e8f0 25%,#f0f4f9 50%,#e2e8f0 75%);background-size:200% 100%;animation:cwb-shimmer 1.4s infinite;width:' + w + '"></div></td>'
+      ).join('') + '</tr>'
+    ).join('') + '</tbody>';
+  }
+
+  // ── Financial term tooltips ───────────────────────────────────────────────
+  const GLOSSARY = {
+    'Base Case Row':   'Top-level cash flow model reporting line (e.g. Fuel, Loan Principal)',
+    'Pay Group':       'Oracle AP payment batch grouping — FUEL, LOAN, SUPPLIER, EMPLOYEE, TAX',
+    'FPC':             'Oracle Function/Project Code — segment 4 of the GL account string',
+    'Sub Group':       'Second-level grouping within a Base Case Row for reporting detail',
+    'Category':        'Granular rule-assigned label beneath the Base Case Row',
+    'AP Outflows':     'Accounts Payable invoice payments — outflows from the Oracle AP module',
+    'Cashbook Debits': 'Receipt side of the JPS cashbook — inflows to bank accounts',
+    'OTP':             'One-Time Password — 6-digit code emailed to the approver to lock a month',
+  };
+  function tip(term) {
+    const txt = GLOSSARY[term];
+    if (!txt) return esc(term);
+    return `<span class="cwb-tip" title="${esc(txt)}">${esc(term)}</span>`;
+  }
+
+  // ── Optimistic toggle ─────────────────────────────────────────────────────
+  async function optimisticToggle(updateFn, revertFn, writeFn, msg) {
+    updateFn();
+    try {
+      await writeFn();
+      if (msg) setStatus(msg, 'ok');
+    } catch (err) {
+      console.warn('[optimisticToggle] revert:', err.message);
+      revertFn();
+      setStatus('Update failed: ' + err.message, 'error');
+    }
+  }
 
   function setStatus(text, kind) {
     // Write a span so the MutationObserver in index.html can pick up the class
@@ -893,12 +952,18 @@
   }
 
   async function loadSubGroups() {
-    const { data, error } = await state.supabase
-      .from("cashflow_sub_groups")
-      .select("id,base_case_row,sub_group,sort_order,active")
-      .order("base_case_row").order("sort_order", { ascending: true, nullsFirst: false }).order("sub_group");
-    if (error) return setStatus(error.message, "error");
-    state.subGroups = data || [];
+    const tbl = $("subGroupsAdminTable");
+    if (tbl) tbl.innerHTML = skelRows(5, ['35%', '35%', '15%', '15%']);
+    const data = await ttlFetch('cwb_sub_groups', 8 * 60 * 1000, async () => {
+      const { data: rows, error } = await state.supabase
+        .from("cashflow_sub_groups")
+        .select("id,base_case_row,sub_group,sort_order,active")
+        .order("base_case_row").order("sort_order", { ascending: true, nullsFirst: false }).order("sub_group");
+      if (error) throw new Error(error.message);
+      return rows || [];
+    }).catch(err => { setStatus(err.message, "error"); return null; });
+    if (data === null) return;
+    state.subGroups = data;
     refreshFormDropdowns(); // rebuild base-row selects now that subGroups are available
     renderSubGroupsAdmin();
   }
@@ -942,12 +1007,18 @@
   }
 
   async function loadSections() {
-    const { data, error } = await state.supabase
-      .from("cashflow_sections")
-      .select("id,base_case_row,section,sort_order,active")
-      .order("sort_order", { ascending: true });
-    if (error) return setStatus(error.message, "error");
-    state.sections = data || [];
+    const tbl = $("sectionsAdminTable");
+    if (tbl) tbl.innerHTML = skelRows(5, ['35%', '35%', '15%', '15%']);
+    const data = await ttlFetch('cwb_sections', 8 * 60 * 1000, async () => {
+      const { data: rows, error } = await state.supabase
+        .from("cashflow_sections")
+        .select("id,base_case_row,section,sort_order,active")
+        .order("sort_order", { ascending: true });
+      if (error) throw new Error(error.message);
+      return rows || [];
+    }).catch(err => { setStatus(err.message, "error"); return null; });
+    if (data === null) return;
+    state.sections = data;
     refreshFormDropdowns();
     renderSectionsAdmin();
   }
@@ -1002,9 +1073,15 @@
   }
 
   async function loadRules() {
-    const { data, error } = await state.supabase.from("cashflow_rules").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("rule_code");
-    if (error) return setStatus(error.message, "error");
-    state.rules = data || [];
+    const tbl = $("rulesTable");
+    if (tbl) tbl.innerHTML = skelRows(8, ['10%', '8%', '12%', '15%', '15%', '40%']);
+    const data = await ttlFetch('cwb_rules', 5 * 60 * 1000, async () => {
+      const { data: rows, error } = await state.supabase.from("cashflow_rules").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("rule_code");
+      if (error) throw new Error(error.message);
+      return rows || [];
+    }).catch(err => { setStatus(err.message, "error"); return null; });
+    if (data === null) return;
+    state.rules = data;
     renderRules();
     refreshFormDropdowns(); // rebuild dropdowns from live rule data
   }
@@ -1084,10 +1161,20 @@
     await loadRules();
   }
 
+  // ── 429-retry fetch ───────────────────────────────────────────────
+  async function fetchWithRetry(url, opts, delays = [500, 1000, 2000]) {
+    for (let i = 0; ; i++) {
+      const res = await fetch(url, opts);
+      if (res.status !== 429 || i >= delays.length) return res;
+      console.warn(`[cwb] 429 rate-limited — retry in ${delays[i]}ms`);
+      await new Promise(r => setTimeout(r, delays[i]));
+    }
+  }
+
   // ── Edge function helper ──────────────────────────────────────────
   async function callEdgeFn(action, payload = {}) {
     const url = `${window.APP_CONFIG.supabaseUrl}/functions/v1/cashflow-approval`;
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1443,7 +1530,7 @@
     try {
       // Fire delete notification (does not block if email not configured)
       try { await callEdgeFn("notify_delete", { month_key: monthKey, deleter_name: userName() }); }
-      catch (_) { /* non-fatal — email config optional */ }
+      catch (_) { console.warn('[cashflow] notify_delete skipped — email config optional'); }
 
       const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).maybeSingle();
       if (!month) { setStatus("Month not found.", "error"); return; }
@@ -2132,14 +2219,14 @@
     $("resetBtn").addEventListener("click", resetMonth);
     $("saveRuleBtn").addEventListener("click", saveRule);
     $("clearRuleBtn").addEventListener("click", clearRule);
-    $("searchInput").addEventListener("input", renderExceptions);
+    $("searchInput").addEventListener("input", debounce(renderExceptions, 300));
     $("sourceFilter").addEventListener("change", renderExceptions);
     $("exportRecordsBtn").addEventListener("click", exportRecords);
     $("exportRulesBtn").addEventListener("click", exportRules);
     $("exportReportBtn").addEventListener("click", exportReport);
     if ($("exportOutflowsBtn"))   $("exportOutflowsBtn").addEventListener("click", exportOutflows);
     if ($("exportExceptionsBtn")) $("exportExceptionsBtn").addEventListener("click", exportExceptions);
-    if ($("allEntriesSearch"))  $("allEntriesSearch").addEventListener("input",  renderAllEntries);
+    if ($("allEntriesSearch"))  $("allEntriesSearch").addEventListener("input",  debounce(renderAllEntries, 300));
     if ($("allEntriesSource"))  $("allEntriesSource").addEventListener("change", renderAllEntries);
     if ($("allEntriesMapped"))  $("allEntriesMapped").addEventListener("change", renderAllEntries);
     if ($("exportAllEntriesBtn")) $("exportAllEntriesBtn").addEventListener("click", () => {
@@ -2149,7 +2236,7 @@
     if ($("exportBaseBtn"))       $("exportBaseBtn").addEventListener("click", exportBase);
     if ($("exportBaseGroupBtn"))  $("exportBaseGroupBtn").addEventListener("click", exportBaseGroup);
     if ($("exportRulesXlsBtn"))   $("exportRulesXlsBtn").addEventListener("click", exportRulesXls);
-    if ($("rulesSearch")) $("rulesSearch").addEventListener("input", renderRules);
+    if ($("rulesSearch")) $("rulesSearch").addEventListener("input", debounce(renderRules, 300));
     if ($("promptReapplyBtn")) $("promptReapplyBtn").addEventListener("click", reapplySavedRules);
     if ($("promptDismissBtn")) $("promptDismissBtn").addEventListener("click", hideReapplyPrompt);
 
