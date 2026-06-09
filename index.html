@@ -621,6 +621,7 @@
         <button class="tab-btn" data-tab="allentries">📝 All Entries</button>
         <button class="tab-btn" data-tab="exceptions">🔍 Map Exceptions <span class="tab-badge" id="excBadge"></span></button>
         <button class="tab-btn" data-tab="base">📋 Base Case</button>
+        <button class="tab-btn" data-tab="accounts">🏦 Accounts</button>
         <button class="tab-btn" data-tab="rules">⚙ Rules</button>
         <button class="tab-btn" data-tab="multimonth">📊 Multi-Month Report</button>
         <button class="tab-btn" data-tab="admin">🔐 Admin</button>
@@ -892,6 +893,31 @@
         <div class="panel" style="margin-top:16px">
           <div class="panel-head">Job # / CB Source Breakdown</div>
           <div class="tablebox"><table id="jobBreakdownTable"></table></div>
+        </div>
+      </div>
+
+      <!-- ── Accounts ── -->
+      <div class="tab-panel" id="accounts">
+        <div class="panel">
+          <div class="panel-head">
+            Account Filters
+            <span class="hint" id="accountsCount"></span>
+            <div style="display:flex;gap:6px">
+              <select id="accountsFilter" class="btn btn-ghost btn-sm" style="padding:2px 8px;cursor:pointer">
+                <option value="all">All accounts</option>
+                <option value="included">Included only</option>
+                <option value="excluded">Excluded only</option>
+              </select>
+            </div>
+          </div>
+          <div class="tablebox tall"><table id="accountsTable"></table></div>
+        </div>
+        <div class="panel" id="accountTxPanel" style="display:none">
+          <div class="panel-head">
+            Transactions — <span id="accountTxTitle"></span>
+            <button class="btn btn-ghost btn-sm" onclick="window.cashflowApp.closeAccountTx()">✕ Close</button>
+          </div>
+          <div class="tablebox" style="max-height:320px"><table id="accountTxTable"></table></div>
         </div>
       </div>
 

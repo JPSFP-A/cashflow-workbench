@@ -49,7 +49,7 @@
 
 
   const state = {
-    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [], sections: [],
+    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [], sections: [], accountFilters: [],
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, multiCollapsed: new Set(), settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
@@ -386,9 +386,25 @@
         && matchSingle(rule.cond3_type, rule.cond3_value,  row);
   }
 
+  function isAccountIncluded(fpc) {
+    if (!fpc || !state.accountFilters.length) return true;
+    const entry = state.accountFilters.find((a) => a.fpc === String(fpc));
+    return entry ? entry.include !== false : true;
+  }
+
   function applyMappings(sourceRows, rules) {
     return sourceRows.map((r) => {
       const row = { ...r };
+      row.account_excluded = !isAccountIncluded(row.fpc);
+      if (row.account_excluded) {
+        row.cashbook_category = "";
+        row.base_case_row     = "";
+        row.main_group        = "";
+        row.sub_group         = "";
+        row.mapped            = false;
+        row.mapping_rule      = "";
+        return row;
+      }
       const rule = rules.find((candidate) => candidate.active !== false && ruleApplies(candidate, row));
       if (rule) {
         row.cashbook_category = rule.category || "";
@@ -905,6 +921,7 @@
     }
   }
   function renderAll() {
+    renderAccounts();
     renderMonthBar();
     renderKpis();
     pendingRender.add("outflows");
@@ -948,7 +965,7 @@
   async function init() {
     if (!(await ensureSupabase())) return;
     setStatus("Connected.", "ok");
-    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings(), loadSubGroups(), loadSections()]);
+    await Promise.all([loadRules(), loadMonths(), loadAudit(), loadSettings(), loadSubGroups(), loadSections(), loadAccountFilters()]);
   }
 
   async function loadSubGroups() {
@@ -1070,6 +1087,106 @@
     if (error) return setStatus(error.message, "error");
     await loadSections();
     setStatus("Removed.", "ok");
+  }
+
+  async function loadAccountFilters() {
+    const { data, error } = await state.supabase.from("cashflow_account_filters").select("*").order("fpc");
+    if (error) return setStatus(error.message, "error");
+    state.accountFilters = data || [];
+    renderAccounts();
+  }
+
+  function renderAccounts() {
+    const filterVal = $("accountsFilter") ? $("accountsFilter").value : "all";
+    const counts = {};
+    state.records.forEach((r) => {
+      if (r.fpc) counts[r.fpc] = (counts[r.fpc] || 0) + 1;
+    });
+    let rows = state.accountFilters;
+    if (filterVal === "included")  rows = rows.filter((a) => a.include !== false);
+    if (filterVal === "excluded")  rows = rows.filter((a) => a.include === false);
+    const el = $("accountsCount");
+    const inc = state.accountFilters.filter((a) => a.include !== false).length;
+    const exc = state.accountFilters.filter((a) => a.include === false).length;
+    if (el) el.textContent = `${inc} included · ${exc} excluded`;
+    table("accountsTable", [
+      { label: "FPC",         key: "fpc" },
+      { label: "Description", key: "description" },
+      { label: "Status", key: "include", render: (a) => {
+          const on  = a.include !== false;
+          const cls = on ? "style=\"color:var(--green,#22c55e);font-weight:600\"" : "style=\"color:var(--red,#ef4444);font-weight:600\"";
+          return `<span ${cls}>${on ? "✔ Included" : "✖ Excluded"}</span>`;
+        }
+      },
+      { label: "Toggle", key: "fpc", render: (a) => {
+          const on  = a.include !== false;
+          const lbl = on ? "Exclude" : "Include";
+          const cls = on ? "btn btn-sm danger" : "btn btn-sm btn-primary";
+          return `<button class="${cls}" onclick="window.cashflowApp.toggleAccount('${esc(a.fpc)}')">${lbl}</button>`;
+        }
+      },
+      { label: "Tx in loaded month", key: "fpc", render: (a) => {
+          const n = counts[a.fpc] || 0;
+          return n ? `<button class="btn btn-ghost btn-sm" onclick="window.cashflowApp.showAccountTx('${esc(a.fpc)}')">${n.toLocaleString()} txns</button>` : '<span style="color:var(--muted)">—</span>';
+        }
+      },
+      { label: "Notes", key: "notes", render: (a) =>
+          `<input style="width:180px;font-size:12px;padding:2px 6px" value="${esc(a.notes || '')}" onblur="window.cashflowApp.saveAccountNote('${esc(a.fpc)}', this.value)">`
+      },
+    ], rows);
+  }
+
+  async function toggleAccount(fpc) {
+    const entry = state.accountFilters.find((a) => a.fpc === fpc);
+    if (!entry) return;
+    const newVal = entry.include === false;
+    const { error } = await state.supabase.from("cashflow_account_filters")
+      .update({ include: newVal, updated_at: new Date().toISOString(), updated_by: userName() })
+      .eq("fpc", fpc);
+    if (error) return setStatus(error.message, "error");
+    entry.include = newVal;
+    renderAccounts();
+    if (state.records.length) {
+      state.records = applyMappings(
+        state.records.map((r) => { const c = { ...r }; delete c.account_excluded; delete c.mapped; delete c.mapping_rule; delete c.cashbook_category; delete c.base_case_row; delete c.main_group; delete c.sub_group; return c; }),
+        state.rules
+      );
+    }
+    setStatus(`FPC ${fpc} ${newVal ? "included" : "excluded"}.`, "ok");
+  }
+
+  async function saveAccountNote(fpc, notes) {
+    const { error } = await state.supabase.from("cashflow_account_filters")
+      .update({ notes, updated_at: new Date().toISOString(), updated_by: userName() })
+      .eq("fpc", fpc);
+    if (error) return setStatus(error.message, "error");
+    const entry = state.accountFilters.find((a) => a.fpc === fpc);
+    if (entry) entry.notes = notes;
+  }
+
+  function showAccountTx(fpc) {
+    const panel = $("accountTxPanel");
+    const title = $("accountTxTitle");
+    if (!panel) return;
+    const entry = state.accountFilters.find((a) => a.fpc === fpc);
+    if (title) title.textContent = `FPC ${fpc} — ${entry ? entry.description : ''}`;
+    const rows = state.records.filter((r) => r.fpc === fpc);
+    table("accountTxTable", [
+      { label: "Date",     key: "acct_date" },
+      { label: "Batch",    key: "batch_name" },
+      { label: "JE",       key: "je_name" },
+      { label: "Vendor",   key: "vendor" },
+      { label: "Debit",    key: "debit",  render: (r) => r.debit  ? fmt(r.debit)  : "" },
+      { label: "Credit",   key: "credit", render: (r) => r.credit ? fmt(r.credit) : "" },
+      { label: "Category", key: "cashbook_category" },
+    ], rows);
+    panel.style.display = "";
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closeAccountTx() {
+    const p = $("accountTxPanel");
+    if (p) p.style.display = "none";
   }
 
   async function loadRules() {
@@ -2237,6 +2354,7 @@
     if ($("exportBaseGroupBtn"))  $("exportBaseGroupBtn").addEventListener("click", exportBaseGroup);
     if ($("exportRulesXlsBtn"))   $("exportRulesXlsBtn").addEventListener("click", exportRulesXls);
     if ($("rulesSearch")) $("rulesSearch").addEventListener("input", debounce(renderRules, 300));
+    if ($("accountsFilter")) $("accountsFilter").addEventListener("change", renderAccounts);
     if ($("promptReapplyBtn")) $("promptReapplyBtn").addEventListener("click", reapplySavedRules);
     if ($("promptDismissBtn")) $("promptDismissBtn").addEventListener("click", hideReapplyPrompt);
 
@@ -2319,5 +2437,5 @@
 
   bindUi();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, init };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, toggleAccount, saveAccountNote, showAccountTx, closeAccountTx, init };
 })();
