@@ -2318,7 +2318,6 @@
   }
 
   bindUi();
-  init();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, init };
 })();

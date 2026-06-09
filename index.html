@@ -1260,6 +1260,7 @@
           welcomeScreen.style.display = "none";
           appShell.classList.add("visible");
           document.getElementById('appSwitcher').style.display = 'flex';
+          if (window.cashflowApp && window.cashflowApp.init) window.cashflowApp.init();
         }, 440);
       }
 
