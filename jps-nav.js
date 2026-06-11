@@ -13,7 +13,7 @@
 
   /* accessId = app_id in admin.app_access (checked via get_my_app_access RPC) */
   var APPS = [
-    { id: 'hub',         accessId: 'fpa_hub',     name: 'FP&A Hub',    url: 'https://jmfinancelab.com' },
+    { id: 'hub',         accessId: 'fpa_hub',     name: 'Finance Hub',    url: 'https://jmfinancelab.com' },
     { id: 'treasury',    accessId: 'treasury',    name: 'Treasury',    url: 'https://treasury.jmfinancelab.com' },
     { id: 'sales',       accessId: 'sales',       name: 'Sales',       url: 'https://sales.jmfinancelab.com' },
     { id: 'om',          accessId: 'om',          name: 'O&M',         url: 'https://om.jmfinancelab.com' },

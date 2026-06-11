@@ -2192,7 +2192,7 @@
         h2{color:#0f2744;font-size:13pt}
       </style></head>
       <body>
-        <h2>JPS FP&amp;A — Cashflow Base Case Multi-Month Comparison</h2>
+        <h2>JPS Finance — Cashflow Base Case Multi-Month Comparison</h2>
         <p style="color:#5e6875;font-size:10pt">Generated: ${new Date().toLocaleString()} &nbsp;|&nbsp; Months: ${keys.join(", ")}</p>
         <table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>
       </body></html>`;
@@ -2259,7 +2259,7 @@
       p{color:#5e6875;font-size:10pt;margin-bottom:10px}
     </style></head>
     <body>
-      <h2>JPS FP&amp;A — ${esc(title)}</h2>
+      <h2>JPS Finance — ${esc(title)}</h2>
       <p>Month: ${esc(monthKey)} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</p>
       ${bodyHtml}
     </body></html>`;
