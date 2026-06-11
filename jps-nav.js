@@ -20,6 +20,7 @@
     { id: 'capex',       accessId: 'capex',       name: 'CapEx',       url: 'https://capex.jmfinancelab.com' },
     { id: 'datamanager', accessId: 'datamanager', name: 'DataManager', url: 'https://datamanager.jmfinancelab.com' },
     { id: 'cash',        accessId: 'cashflow',    name: 'Cash',        url: 'https://cash.jmfinancelab.com' },
+    { id: 'tracker',     accessId: 'tracker',     name: 'Tracker',     url: 'https://tracker.jmfinancelab.com' },
     { id: 'admin',       accessId: 'admin',       name: 'Admin',       url: 'https://admin.jmfinancelab.com' }
   ];
 
