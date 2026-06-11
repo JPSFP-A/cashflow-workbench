@@ -242,6 +242,25 @@ drop policy if exists "anon full access audit" on public.cashflow_audit_log;
 create policy "anon full access audit"
   on public.cashflow_audit_log for all using (true) with check (true);
 
+-- ============================================================
+-- Sub-group lookup table (base_case_row → sub_group)
+-- ============================================================
+create table if not exists public.cashflow_sub_groups (
+  id            uuid primary key default gen_random_uuid(),
+  base_case_row text not null,
+  sub_group     text not null,
+  sort_order    integer,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  unique(base_case_row, sub_group)
+);
+alter table public.cashflow_sub_groups enable row level security;
+drop policy if exists "anon full access sub_groups" on public.cashflow_sub_groups;
+create policy "anon full access sub_groups"
+  on public.cashflow_sub_groups for all using (true) with check (true);
+create index if not exists cashflow_sub_groups_base_case_row_idx
+  on public.cashflow_sub_groups(base_case_row);
+
 -- Also drop the old "authenticated" policies if they exist
 drop policy if exists "authenticated full access months" on public.cashflow_months;
 drop policy if exists "authenticated full access uploads" on public.cashflow_source_uploads;

@@ -1151,12 +1151,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
+  <script src="./jps-auth.js"></script>
+  <script src="./jps-nav.js"></script>
   <!-- Create shared client BEFORE app.js so ensureSupabase() uses it from the start -->
   <script>
     window.APP_SUPABASE_CLIENT = window.supabase.createClient(
       window.APP_CONFIG.supabaseUrl,
-      window.APP_CONFIG.supabaseAnonKey
+      window.APP_CONFIG.supabaseAnonKey,
+      window.JpsAuth ? JpsAuth.clientOptions() : undefined
     );
+    try { if (window.JpsNav) JpsNav.bind(window.APP_SUPABASE_CLIENT); } catch(e){ console.warn('JpsNav bind failed', e); }
   </script>
   <script src="./jps-monitor.js"></script>
   <script>
