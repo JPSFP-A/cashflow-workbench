@@ -6,7 +6,13 @@
   <title>Cashflow Workbench — JPS Finance</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./jps-theme.css" />
+<style>
+/* design-eng polish: stat cards lift on hover + fade in (shared --jps tokens) */
+.kpi-tile{transition:transform var(--jps-dur) var(--jps-ease-out),box-shadow var(--jps-dur) var(--jps-ease-out),border-color var(--jps-dur) var(--jps-ease);animation:jpsFadeUp var(--jps-dur-slow) var(--jps-ease-out) both}
+.kpi-tile:hover{transform:translateY(-3px);box-shadow:var(--jps-shadow-lg);border-color:color-mix(in srgb,var(--jps-accent) 40%,var(--border))}
+</style>
   <style>
     /* ── Tokens ───────────────────────────────────────────────────── */
     :root {
@@ -28,7 +34,7 @@
       --radius-sm: 6px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', system-ui, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; min-height: 100vh; }
+    body { font-family: 'IBM Plex Sans', system-ui, sans-serif; color: var(--ink); background: var(--soft); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; min-height: 100vh; }
 
     /* ── Welcome screen ───────────────────────────────────────────── */
     #welcomeScreen {
@@ -240,7 +246,7 @@
     }
     .kpi-tile .kpi-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
     .kpi-tile .kpi-icon { font-size: 18px; line-height: 1; }
-    .kpi-tile .kpi-value { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; line-height: 1.1; font-family: 'DM Mono', monospace; }
+    .kpi-tile .kpi-value { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; line-height: 1.1; font-family: 'IBM Plex Mono', monospace; }
     .kpi-tile.warn .kpi-value { color: var(--gold); }
     .kpi-tile.bad  .kpi-value { color: var(--red); }
     .kpi-tile.good .kpi-value { color: var(--teal); }
@@ -496,17 +502,6 @@
   </style>
 </head>
 <body>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       APP-SWITCHER BAR (shown after login)
-  ═══════════════════════════════════════════════════════════════ -->
-  <div id="appSwitcher" style="display:none;height:38px;background:#060c18;border-bottom:1px solid rgba(255,255,255,0.05);align-items:center;padding:0 12px;gap:4px;flex-shrink:0;z-index:200;position:relative;">
-    <a href="https://jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">📊 Finance</a>
-    <a href="https://om.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ O&amp;M</a>
-    <a href="https://sales.jmfinancelab.com" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;color:#5A6FA8;text-decoration:none;border:1px solid transparent;">⚡ Sales</a>
-    <a href="#" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:7px;font-size:11px;font-weight:600;background:rgba(245,158,11,0.1);color:#FBB024;border:1px solid rgba(245,158,11,0.25);text-decoration:none;">💧 Cashflow</a>
-    <span style="margin-left:auto;font-size:10px;color:#3B4F8C;">⚡ JPS Financial Systems</span>
-  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
        WELCOME SCREEN
@@ -1153,6 +1148,7 @@
   <script src="./config.js"></script>
   <script src="./jps-auth.js"></script>
   <script src="./jps-nav.js"></script>
+<script src="./jps-states.js"></script>
   <!-- Create shared client BEFORE app.js so ensureSupabase() uses it from the start -->
   <script>
     window.APP_SUPABASE_CLIENT = window.supabase.createClient(
@@ -1289,8 +1285,7 @@
         setTimeout(() => {
           welcomeScreen.style.display = "none";
           appShell.classList.add("visible");
-          document.getElementById('appSwitcher').style.display = 'flex';
-          if (window.cashflowApp && window.cashflowApp.init) window.cashflowApp.init();
+if (window.cashflowApp && window.cashflowApp.init) window.cashflowApp.init();
         }, 440);
       }
 

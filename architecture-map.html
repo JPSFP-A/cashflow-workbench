@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cash Workbench — Architecture Map</title>
+<style>
+:root {
+  --bg: #0F0F0F;
+  --panel: #161616;
+  --panel-2: #1c1c1c;
+  --border: #2a2a2a;
+  --text: #e8e8e8;
+  --muted: #8a8a8a;
+  --client: #4ea1ff;
+  --route: #7bd389;
+  --service: #c792ea;
+  --db: #ffb86b;
+  --external: #ff6b9d;
+  --critical: #ff3860;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── Top bar ── */
+#topbar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap;
+}
+#topbar h1 { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; }
+#topbar .subtitle { font-size: 11px; color: var(--muted); }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+.chip {
+  padding: 4px 11px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.chip:hover { border-color: #444; color: var(--text); }
+.chip.active { background: var(--client); color: #000; border-color: var(--client); }
+
+#hint { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+
+/* ── Layout ── */
+#layout { display: flex; flex: 1; min-height: 0; }
+
+/* ── Canvas ── */
+#canvasWrap { flex: 1; position: relative; overflow: hidden; cursor: grab; }
+#canvasWrap.grabbing { cursor: grabbing; }
+#svg-canvas { position: absolute; top: 0; left: 0; }
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 280px; min-width: 280px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto; padding: 0;
+  display: flex; flex-direction: column;
+}
+#sidebar-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em;
+}
+#sidebar-content { padding: 14px 16px; flex: 1; }
+.sb-node-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.sb-node-sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+.sb-section { margin-bottom: 14px; }
+.sb-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 6px; }
+.sb-desc { font-size: 12px; color: #b8c5dc; line-height: 1.6; }
+.sb-edge-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.sb-edge-list li { font-size: 11px; color: var(--muted); padding: 3px 8px; background: var(--panel-2); border-radius: 4px; border-left: 2px solid var(--border); }
+.sb-edge-list li span { color: var(--text); }
+.finding { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 11px; color: #b8c5dc; line-height: 1.5; }
+.finding strong { color: var(--text); display: block; margin-bottom: 2px; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.badge-critical { background: rgba(255,56,96,.2); color: var(--critical); border: 1px solid rgba(255,56,96,.3); }
+.badge-warn { background: rgba(255,184,107,.15); color: var(--db); border: 1px solid rgba(255,184,107,.25); }
+.badge-ok { background: rgba(123,211,137,.15); color: var(--route); border: 1px solid rgba(123,211,137,.25); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div>
+    <h1>Cash Workbench — Architecture Map</h1>
+    <div class="subtitle">Vanilla JS + Supabase · Direct Cash Flow Workbench</div>
+  </div>
+  <div class="chips" id="chips">
+    <div class="chip active" data-filter="all">Overview</div>
+    <div class="chip" data-filter="parse">Parsing</div>
+    <div class="chip" data-filter="rules">Rule Engine</div>
+    <div class="chip" data-filter="db">Data Layer</div>
+    <div class="chip" data-filter="render">Rendering</div>
+    <div class="chip" data-filter="admin">Admin / Approval</div>
+  </div>
+  <div id="hint">Scroll to zoom · Drag to pan · Click node for details</div>
+</div>
+
+<div id="layout">
+  <div id="canvasWrap">
+    <svg id="svg-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+  <div id="sidebar">
+    <div id="sidebar-header">Inspector</div>
+    <div id="sidebar-content" id="sb-default">
+      <div class="sb-node-title" style="margin-bottom:12px">Cash Workbench</div>
+      <div class="sb-section">
+        <div class="sb-section-label">Notable Findings</div>
+        <div class="finding"><strong>No innerHTML XSS risk</strong>All user/DB text runs through <code>esc()</code> before insertion. Injection-safe.</div>
+        <div class="finding"><strong><span class="badge badge-warn">Note</span> Chunked bulk insert</strong>Records saved in 3-concurrent chunks of 1,000 — protects against Supabase statement timeouts on large months.</div>
+        <div class="finding"><strong><span class="badge badge-ok">Pattern</span> Lazy AP detail</strong><code>loadApDetail()</code> defers 17 heavy columns until Exceptions tab opened — keeps initial load fast.</div>
+        <div class="finding"><strong><span class="badge badge-warn">Note</span> OTP via Edge Function</strong>Approval flow sends a 6-digit OTP through <code>cashflow-approval</code> Edge Function — browser never sees the service role key.</div>
+        <div class="finding"><strong><span class="badge badge-ok">Pattern</span> TTL cache</strong><code>ttlFetch()</code> caches rules, sections, sub-groups for 5–8 min — avoids redundant Supabase round-trips.</div>
+        <div class="finding"><strong><span class="badge badge-critical">Gap</span> No RLS verified</strong>App uses anon key for all writes. Security depends entirely on Supabase RLS policies in <code>schema.sql</code>.</div>
+        <div class="finding"><strong>Fixed-width parser</strong><code>parseCashbook()</code> derives column spans dynamically from the dash-separator line — handles 7–12+ column report formats without hardcoding positions.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// DATA MODEL
+// ─────────────────────────────────────────────────────────────
+
+const clusters = [
+  { id: "ui",      label: "UI / Sections",        x:  30, y:  60, w: 210, h: 780 },
+  { id: "parse",   label: "Parsing / Merge",       x: 270, y:  60, w: 210, h: 320 },
+  { id: "rules",   label: "Rule Engine",           x: 270, y: 410, w: 210, h: 430 },
+  { id: "state",   label: "In-Memory State",       x: 510, y:  60, w: 210, h: 280 },
+  { id: "render",  label: "Rendering",             x: 510, y: 370, w: 210, h: 520 },
+  { id: "db",      label: "Supabase DB Tables",    x: 750, y:  60, w: 210, h: 520 },
+  { id: "util",    label: "Utilities",             x: 750, y: 610, w: 210, h: 230 },
+  { id: "ext",     label: "External / Edge",       x: 990, y:  60, w: 210, h: 280 },
+  { id: "admin",   label: "Admin / Approval",      x: 990, y: 370, w: 210, h: 280 },
+];
+
+const N = (id, cluster, label, sub, x, y, w, h, color, opts = {}) =>
+  ({ id, cluster, label, sub, x, y, w, h, color, ...opts });
+
+const nodes = [
+  // ── UI Sections ──
+  N("welcome",       "ui", "welcomeScreen",         "Login gate / name capture",      50,  80, 170, 44, "var(--client)"),
+  N("header",        "ui", "header",                "App bar + user badge + theme",   50, 145, 170, 44, "var(--client)"),
+  N("sidebar-nav",   "ui", "cwb-sidebar",           "Dark sidebar nav strip",         50, 210, 170, 44, "var(--client)"),
+  N("setup-panel",   "ui", "setup-banner",          "Missing config warning",         50, 275, 170, 44, "var(--client)"),
+  N("workspace",     "ui", "workspace-card",        "Month file upload + controls",   50, 340, 170, 44, "var(--client)"),
+  N("month-bar",     "ui", "month-bar",             "Loaded month status strip",      50, 405, 170, 44, "var(--client)"),
+  N("kpis",          "ui", "kpi-row",               "6 KPI tiles (AP/CB/unmapped)",   50, 470, 170, 44, "var(--client)"),
+  N("tab-nav",       "ui", "tab-nav",               "Tab switcher (5 tabs)",          50, 535, 170, 44, "var(--client)"),
+  N("modal-approval","ui", "approvalModal",         "OTP entry modal",                50, 600, 170, 44, "var(--client)"),
+  N("multi-report",  "ui", "Multi-month Report",    "Cross-month report panel",       50, 665, 170, 44, "var(--client)"),
+  N("theme-toggle",  "ui", "theme-toggle",          "Propel / JPS / Light / Dark",    50, 730, 170, 44, "var(--client)"),
+
+  // ── Parsing ──
+  N("parseCashbook", "parse", "parseCashbook()",    "Fixed-width CB parser (180/132)", 290, 80, 170, 44, "var(--route)"),
+  N("parseAp",       "parse", "parseAp()",          "Fixed-width AP/Oracle parser",    290, 145, 170, 44, "var(--route)"),
+  N("mergeCashbooks","parse", "mergeCashbooks()",   "Merges desc+account CBs by key",  290, 210, 170, 44, "var(--route)"),
+  N("parseCsv",      "parse", "parseCsv()",         "CSV import parser (rules)",       290, 275, 170, 44, "var(--route)"),
+  N("accountParts",  "parse", "accountParts()",     "GL account code segment splitter",290, 340, 170, 44, "var(--route)"),
+
+  // ── Rule Engine ──
+  N("matchSingle",   "rules", "matchSingle()",      "Evaluates one condition against record", 290, 430, 170, 44, "var(--service)"),
+  N("ruleApplies",   "rules", "ruleApplies()",      "Applies scope + all 3 conditions", 290, 495, 170, 44, "var(--service)"),
+  N("applyMappings", "rules", "applyMappings()",    "Maps every record to category+row", 290, 560, 170, 44, "var(--service)", { critical: true }),
+  N("inRange",       "rules", "inRange()",          "Numeric/alpha range matcher",      290, 625, 170, 44, "var(--service)"),
+  N("isAccountIncl", "rules", "isAccountIncluded()", "FPC include/exclude gate",        290, 690, 170, 44, "var(--service)"),
+  N("liveBaseRows",  "rules", "liveBaseRows()",     "Ordered base_case_row list",       290, 755, 170, 44, "var(--service)"),
+
+  // ── State ──
+  N("state",         "state", "state{}",            "Central in-memory store",         530, 80, 170, 44, "var(--db)", { critical: true }),
+  N("ttlFetch",      "state", "ttlFetch()",         "TTL cache for DB reads",           530, 145, 170, 44, "var(--db)"),
+  N("debounce",      "state", "debounce()",         "Search debounce utility",          530, 210, 170, 44, "var(--db)"),
+  N("fetchAllRecs",  "state", "fetchAllRecords()",  "Paginated record loader (1k pages)",530, 275, 170, 44, "var(--db)"),
+
+  // ── Rendering ──
+  N("renderKpis",    "render", "renderKpis()",      "Calculates + renders 6 KPI tiles", 530, 390, 170, 44, "var(--client)"),
+  N("renderGrouped", "render", "renderGroupedBase()","Sectioned cash-flow summary table",530, 455, 170, 44, "var(--client)", { critical: true }),
+  N("renderBase",    "render", "renderBase()",      "Flat base_case_row totals table",  530, 520, 170, 44, "var(--client)"),
+  N("renderOutflows","render", "renderOutflows()",  "AP/CB outflow group tables",       530, 585, 170, 44, "var(--client)"),
+  N("renderExc",     "render", "renderExceptions()", "Unmapped / no-row exception list",530, 650, 170, 44, "var(--client)"),
+  N("renderAllEnt",  "render", "renderAllEntries()","Full filtered record table",       530, 715, 170, 44, "var(--client)"),
+  N("renderRules",   "render", "renderRules()",     "Mapping rules list with edit/del", 530, 780, 170, 44, "var(--client)"),
+  N("renderJobBreak","render", "renderJobBreakdown()","Job # + CB source breakdown",    530, 845, 170, 44, "var(--client)"),
+
+  // ── Supabase Tables ──
+  N("tbl-months",    "db", "cashflow_months",       "Month registry + lock status",    770, 80, 170, 44, "var(--db)"),
+  N("tbl-records",   "db", "cashflow_records",      "All parsed+mapped transaction rows",770, 145, 170, 44, "var(--db)", { critical: true }),
+  N("tbl-uploads",   "db", "cashflow_source_uploads","Raw source file text per month", 770, 210, 170, 44, "var(--db)"),
+  N("tbl-rules",     "db", "cashflow_rules",        "Mapping rule definitions",        770, 275, 170, 44, "var(--db)"),
+  N("tbl-audit",     "db", "cashflow_audit_log",    "User action history (200 rows)",  770, 340, 170, 44, "var(--db)"),
+  N("tbl-subgroups", "db", "cashflow_sub_groups",   "Sub-group labels per base row",   770, 405, 170, 44, "var(--db)"),
+  N("tbl-sections",  "db", "cashflow_sections",     "Report section groupings",        770, 470, 170, 44, "var(--db)"),
+  N("tbl-acctfilt",  "db", "cashflow_account_filters","FPC include/exclude registry", 770, 535, 170, 44, "var(--db)"),
+
+  // ── Utilities ──
+  N("esc",           "util", "esc()",               "HTML entity escaper (XSS safe)",  770, 630, 170, 44, "var(--muted)"),
+  N("money",         "util", "money()",             "Intl number formatter (1 dp)",    770, 695, 170, 44, "var(--muted)"),
+  N("toCsv",         "util", "toCsv()",             "Array-of-objects CSV serialiser", 770, 760, 170, 44, "var(--muted)"),
+  N("download",      "util", "download()",          "Blob download helper",            770, 825, 170, 44, "var(--muted)"),
+
+  // ── External / Edge ──
+  N("supabase-js",   "ext", "supabase-js (CDN)",    "Supabase client library",         1010, 80, 170, 44, "var(--external)"),
+  N("config-js",     "ext", "config.js",            "Supabase URL + anon key",         1010, 145, 170, 44, "var(--external)"),
+  N("jps-auth",      "ext", "jps-auth.js",          "Platform SSO shared auth",        1010, 210, 170, 44, "var(--external)"),
+
+  // ── Admin / Approval ──
+  N("callEdgeFn",    "admin", "callEdgeFn()",        "HTTP POST to Edge Function",      1010, 390, 170, 44, "var(--external)"),
+  N("edge-fn",       "admin", "cashflow-approval",   "Supabase Edge: OTP send/verify",  1010, 455, 170, 44, "var(--external)"),
+  N("requestApproval","admin","requestApproval()",   "Triggers approval OTP flow",      1010, 520, 170, 44, "var(--service)"),
+  N("submitOtp",     "admin", "submitApprovalCode()","Verifies OTP → locks month",     1010, 585, 170, 44, "var(--service)"),
+  N("tbl-settings",  "admin", "cashflow_settings",   "Approver email + config KVs",    1010, 650, 170, 44, "var(--db)"),
+];
+
+const edges = [
+  // Parse flow
+  { from: "workspace",     to: "parseCashbook",   kind: "normal",   label: "CB files",     tag: "parse" },
+  { from: "workspace",     to: "parseAp",         kind: "normal",   label: "AP file",      tag: "parse" },
+  { from: "parseCashbook", to: "mergeCashbooks",  kind: "normal",   label: "180+132 rows", tag: "parse" },
+  { from: "accountParts",  to: "parseCashbook",   kind: "normal",   label: "GL segments",  tag: "parse" },
+  { from: "parseCsv",      to: "tbl-rules",       kind: "db",       label: "CSV import",   tag: "parse" },
+
+  // Rule engine
+  { from: "mergeCashbooks","to": "applyMappings", kind: "critical",  label: "source rows",  tag: "rules" },
+  { from: "parseAp",       to: "applyMappings",   kind: "critical",  label: "AP rows",      tag: "rules" },
+  { from: "applyMappings", to: "matchSingle",     kind: "normal",   label: "each row",     tag: "rules" },
+  { from: "applyMappings", to: "ruleApplies",     kind: "normal",   label: "each rule",    tag: "rules" },
+  { from: "ruleApplies",   to: "matchSingle",     kind: "normal",   label: "3 conditions", tag: "rules" },
+  { from: "matchSingle",   to: "inRange",         kind: "normal",   label: "range check",  tag: "rules" },
+  { from: "applyMappings", to: "isAccountIncl",   kind: "normal",   label: "FPC gate",     tag: "rules" },
+  { from: "isAccountIncl", to: "tbl-acctfilt",    kind: "db",       label: "lookup",       tag: "db" },
+
+  // State population
+  { from: "applyMappings", to: "state",           kind: "critical",  label: "records[]",   tag: "rules" },
+  { from: "tbl-rules",     to: "state",           kind: "db",       label: "rules[]",      tag: "db" },
+  { from: "tbl-months",    to: "state",           kind: "db",       label: "months[]",     tag: "db" },
+  { from: "tbl-sections",  to: "state",           kind: "db",       label: "sections[]",   tag: "db" },
+  { from: "tbl-subgroups", to: "state",           kind: "db",       label: "subGroups[]",  tag: "db" },
+  { from: "tbl-audit",     to: "state",           kind: "db",       label: "audit[]",      tag: "db" },
+  { from: "fetchAllRecs",  to: "tbl-records",     kind: "db",       label: "paginated GET",tag: "db" },
+  { from: "fetchAllRecs",  to: "state",           kind: "db",       label: "records[]",    tag: "db" },
+  { from: "ttlFetch",      to: "tbl-rules",       kind: "db",       label: "5 min cache",  tag: "db" },
+  { from: "ttlFetch",      to: "tbl-sections",    kind: "db",       label: "8 min cache",  tag: "db" },
+  { from: "ttlFetch",      to: "tbl-subgroups",   kind: "db",       label: "8 min cache",  tag: "db" },
+
+  // Save path (critical)
+  { from: "workspace",     to: "tbl-months",      kind: "critical",  label: "upsert month",tag: "db" },
+  { from: "workspace",     to: "tbl-uploads",     kind: "db",       label: "raw text",     tag: "db" },
+  { from: "workspace",     to: "tbl-records",     kind: "critical",  label: "3-conc chunks",tag: "db" },
+
+  // Rendering
+  { from: "state",         to: "renderKpis",      kind: "normal",   label: "records[]",   tag: "render" },
+  { from: "state",         to: "renderGrouped",   kind: "critical",  label: "records[]",   tag: "render" },
+  { from: "state",         to: "renderBase",      kind: "normal",   label: "records[]",   tag: "render" },
+  { from: "state",         to: "renderOutflows",  kind: "normal",   label: "records[]",   tag: "render" },
+  { from: "state",         to: "renderExc",       kind: "normal",   label: "records[]",   tag: "render" },
+  { from: "state",         to: "renderAllEnt",    kind: "normal",   label: "records[]",   tag: "render" },
+  { from: "state",         to: "renderRules",     kind: "normal",   label: "rules[]",     tag: "render" },
+  { from: "liveBaseRows",  to: "renderGrouped",   kind: "normal",   label: "row order",   tag: "render" },
+  { from: "renderGrouped", to: "renderJobBreak",  kind: "normal",   label: "triggers",    tag: "render" },
+  { from: "renderKpis",    to: "kpis",            kind: "mount",    label: "inject HTML", tag: "render" },
+  { from: "renderGrouped", to: "tab-nav",         kind: "mount",    label: "Base tab",    tag: "render" },
+  { from: "renderExc",     to: "tab-nav",         kind: "mount",    label: "Exc tab",     tag: "render" },
+
+  // Approval / Admin
+  { from: "requestApproval","to":"callEdgeFn",    kind: "api",      label: "send_code",   tag: "admin" },
+  { from: "submitOtp",     to: "callEdgeFn",      kind: "api",      label: "verify_code", tag: "admin" },
+  { from: "callEdgeFn",    to: "edge-fn",         kind: "api",      label: "HTTP POST",   tag: "admin" },
+  { from: "edge-fn",       to: "tbl-months",      kind: "db",       label: "lock status", tag: "admin" },
+  { from: "tbl-settings",  to: "requestApproval", kind: "db",       label: "approver email",tag: "admin" },
+  { from: "modal-approval","to": "submitOtp",     kind: "mount",    label: "OTP input",   tag: "admin" },
+
+  // Shared infra
+  { from: "config-js",     to: "supabase-js",     kind: "normal",   label: "URL+key",     tag: "db" },
+  { from: "supabase-js",   to: "state",           kind: "normal",   label: "client",      tag: "db" },
+  { from: "jps-auth",      to: "welcome",         kind: "normal",   label: "SSO token",   tag: "db" },
+  { from: "esc",           to: "renderGrouped",   kind: "normal",   label: "safe HTML",   tag: "render" },
+  { from: "money",         to: "renderKpis",      kind: "normal",   label: "format",      tag: "render" },
+  { from: "toCsv",         to: "download",        kind: "normal",   label: "export",      tag: "render" },
+];
+
+// Plain-English descriptions
+const DESCRIPTIONS = {
+  welcome:        "The splash screen shown before the app loads. Captures the user's name (stored locally) and fades out after entry.",
+  header:         "Sticky top bar showing app title, connection status pill, and user badge with initials.",
+  "sidebar-nav":  "Dark left navigation strip with section links: Overview, Base Case, Outflows, Exceptions, Rules, Admin.",
+  "setup-panel":  "Yellow warning banner that appears if config.js has placeholder credentials.",
+  workspace:      "Upload panel where the team attaches the three Oracle source files (AP, cashbook 180, cashbook 132), selects a month, and presses Process.",
+  "month-bar":    "Strip below the workspace showing which month is loaded, when it was last processed, and by whom.",
+  kpis:           "Six dashboard tiles: AP Outflows, Cashbook Debits, Cashbook Credits, Unmapped count, No-Base-Row count, Total Exceptions.",
+  "tab-nav":      "Five-tab switcher: Outflows, Base Case, All Entries, Exceptions, Rules. Active tab renders lazily.",
+  "modal-approval":"Overlay that collects the 6-digit OTP emailed to the approver. Locks the month on success.",
+  "multi-report": "Separate panel for cross-month trending. Select multiple months, generates a side-by-side base_case_row table with job breakdown.",
+  "theme-toggle": "Header button cycling three visual themes: Propel (default navy/amber), JPS (JPS blue), Dark.",
+
+  parseCashbook:  "Parses Oracle General Ledger cashbook fixed-width text exports. Reads the dash-separator line to derive column spans dynamically — handles 7 to 12+ column formats without hardcoded positions.",
+  parseAp:        "Parses the Oracle Accounts Payable invoice payment report using 24 fixed column spans. Restores leading zeros on CI and FPC codes. Signs amounts as outflows.",
+  mergeCashbooks: "Merges cashbook 180 (richer descriptions) onto cashbook 132 (full GL account detail) by composite key (batch_name + je_name + source + category_code). Falls back to positional match when keys collide.",
+  parseCsv:       "RFC-compliant CSV parser used for bulk rule import. Handles quoted fields with embedded commas and escaped double-quotes.",
+  accountParts:   "Splits an Oracle GL account string like 01.001.12345.10200 into cost_item (segment 3) and FPC (segment 4), preserving leading zeros.",
+
+  matchSingle:    "Tests a single condition type (e.g. vendor_contains, fpc_range, jobno_equals) against one record field. Returns true when condition is blank (optional). Supports 18 match types.",
+  ruleApplies:    "Combines scope filter (AP/CASHBOOK/CASHBOOK_DEBIT/CASHBOOK_CREDIT) with up to 3 AND conditions. First matching rule wins.",
+  applyMappings:  "Core mapping loop: runs every source record through the rule list, stamping cashbook_category, base_case_row, main_group, sub_group on each match. Excluded FPCs are short-circuited early.",
+  inRange:        "Range checker used by fpc_range, cashbook_cost_range, jobno_range. Handles both numeric and alphanumeric ranges (lexicographic for fixed-width codes like W0000216).",
+  isAccountIncl:  "Looks up the FPC code in cashflow_account_filters. Returns true (include) unless explicitly marked exclude=false.",
+  liveBaseRows:   "Builds the canonical ordered list of base_case_row values: sections table sort_order first, then rule-defined rows, then any extra from loaded records.",
+
+  state:          "Single JavaScript object holding all runtime data: supabase client, rules[], records[], months[], uploads{}, sections[], subGroups[], accountFilters[], audit[], and UI state (loadedMonth, baseDetailFilter, multiReport, etc.).",
+  ttlFetch:       "Lightweight in-memory TTL cache. Avoids re-fetching rules (5 min), sections (8 min), and sub-groups (8 min) on every tab switch.",
+  debounce:       "Standard debounce wrapper applied to search inputs to avoid rendering on every keystroke.",
+  fetchAllRecs:   "Paginates cashflow_records in 1,000-row pages because PostgREST caps single responses at 1,000. Continues until a short page signals end-of-data.",
+
+  renderKpis:     "Iterates state.records once to sum AP outflows, cashbook debits/credits, and exception counts. Writes six KPI tile HTML strings.",
+  renderGrouped:  "The main cash-flow view. Groups records into sections → base_case_rows → categories. Shows section headers, subtotals, and a net inflow/outflow footer row.",
+  renderBase:     "Flat table view: one row per base_case_row with total amount, line count, and unmapped count.",
+  renderOutflows: "Three sub-tables on the Outflows tab: AP by base row, AP by category, cashbook by category — each with a totals footer.",
+  renderExc:      "Exception list filtered to unmapped or no-base-row records. Has a 'Map' button that pre-fills the rule form. Lazy-loads AP detail columns on first open.",
+  renderAllEnt:   "Full searchable/filterable record table capped at 2,000 rows. Supports AP/cashbook source filter and mapped/unmapped filter.",
+  renderRules:    "Rules management table with up/down sort controls, condition summary, active toggle, and delete. Filtered by search box.",
+  renderJobBreak: "Job # breakdown panel on the Base Case tab: AP records grouped by jobno, cashbook records grouped by CB source column.",
+
+  "tbl-months":   "One row per processed month. Stores month_key (YYYY-MM), last_processed_at, processed_by, status (open/approved), and approval metadata.",
+  "tbl-records":  "The largest table. One row per parsed transaction — both AP and cashbook records — with all mapping results stored. Deleted and re-inserted on every reprocess.",
+  "tbl-uploads":  "Stores the raw text content of each uploaded source file so the month can be reprocessed without re-uploading.",
+  "tbl-rules":    "Mapping rule definitions: rule_code, rule_type, match_value, up to 3 conditions, category, base_case_row, applies_to scope, sort_order.",
+  "tbl-audit":    "Append-only audit trail. Last 200 rows shown in-app. Records: process_month, save_rule, delete_rule, import_rules, reset_month, etc.",
+  "tbl-subgroups":"Sub-group name lookup table keyed by base_case_row. Used in rule form dropdown and in multi-month report grouping.",
+  "tbl-sections": "Maps base_case_row values to named report sections (e.g. Operating, Investing, Financing) with sort_order for display grouping.",
+  "tbl-acctfilt": "FPC inclusion/exclusion registry. Excluded FPCs are skipped by applyMappings() before any rule matching.",
+  "tbl-settings": "Key-value settings table. Currently used for approver_email which the OTP flow reads at runtime.",
+
+  esc:            "Replaces &, <, >, \", ' with HTML entities before any string is injected into innerHTML. Used on every user/DB value. Prevents XSS.",
+  money:          "Wraps Intl.NumberFormat with 1 decimal place and thousand separators. Applied to all monetary amounts in tables and KPIs.",
+  toCsv:          "Serialises an array of objects to CSV. Quotes values containing commas, newlines, or double-quotes. Used for rule and record exports.",
+  download:       "Creates a temporary Blob URL, triggers an anchor click download, then revokes the URL after 1 second.",
+
+  "supabase-js":  "The @supabase/supabase-js browser client loaded from CDN. Provides the authenticated client used for all DB reads and writes.",
+  "config-js":    "config.js (git-ignored) provides window.APP_CONFIG = { supabaseUrl, supabaseAnonKey }. ensureSupabase() validates this before any network call.",
+  "jps-auth":     "Shared platform SSO module. Checks the jps_sso_v1 cookie on .jmfinancelab.com and provides the Supabase authenticated client as window.APP_SUPABASE_CLIENT.",
+
+  callEdgeFn:     "POSTs to the cashflow-approval Supabase Edge Function with action and payload. Includes 429-retry with exponential backoff (500ms, 1s, 2s).",
+  "edge-fn":      "Supabase Edge Function (Deno) named cashflow-approval. Actions: send_code (generates + emails OTP), verify_code (validates + locks month), notify_delete (emails on reset).",
+  requestApproval:"Reads approver_email from settings, calls send_code via callEdgeFn, stores pending month, opens the OTP modal.",
+  submitOtp:      "Reads OTP input, calls verify_code, closes modal on success. Reloads months and audit log to reflect new locked status.",
+};
+
+const CONNECTS = {};
+nodes.forEach(n => { CONNECTS[n.id] = { out: [], in: [] }; });
+edges.forEach(e => {
+  if (CONNECTS[e.from]) CONNECTS[e.from].out.push(e);
+  if (CONNECTS[e.to])   CONNECTS[e.to].in.push(e);
+});
+
+// ─────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────
+
+const COLORS = {
+  critical: '#ff3860',
+  api:      '#f5803e',
+  db:       '#ffb86b',
+  mount:    '#4ea1ff',
+  normal:   '#3a3a3a',
+};
+
+const SVG_W = 1240, SVG_H = 960;
+const svg = document.getElementById('svg-canvas');
+svg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+svg.setAttribute('width', SVG_W);
+svg.setAttribute('height', SVG_H);
+
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+// Defs
+const defs = svgEl('defs', {}, svg);
+['critical','api','db','mount','normal'].forEach(kind => {
+  const m = svgEl('marker', { id: `arrow-${kind}`, markerWidth:'6', markerHeight:'6', refX:'5', refY:'3', orient:'auto' }, defs);
+  svgEl('path', { d:'M0,0 L0,6 L6,3 z', fill: COLORS[kind] }, m);
+});
+
+// Cluster backgrounds
+const clusterGroup = svgEl('g', { id: 'clusters' }, svg);
+clusters.forEach(c => {
+  svgEl('rect', {
+    x: c.x - 10, y: c.y - 28, width: c.w + 20, height: c.h + 38,
+    rx: 8, fill: '#111', stroke: '#232323', 'stroke-width': 1
+  }, clusterGroup);
+  svgEl('text', {
+    x: c.x + c.w / 2, y: c.y - 10,
+    'text-anchor': 'middle', fill: '#3a3a3a',
+    'font-size': '10', 'font-weight': '700', 'letter-spacing': '0.07em',
+    'font-family': 'system-ui, sans-serif'
+  }, clusterGroup).textContent = c.label.toUpperCase();
+});
+
+// Edges
+const edgeGroup = svgEl('g', { id: 'edges' }, svg);
+const nodeCenter = id => {
+  const n = nodes.find(n => n.id === id);
+  return n ? { x: n.x + n.w / 2, y: n.y + n.h / 2 } : { x: 0, y: 0 };
+};
+const edgeEls = {};
+edges.forEach((e, i) => {
+  const a = nodeCenter(e.from), b = nodeCenter(e.to);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const cx1 = a.x + dx * 0.4, cy1 = a.y;
+  const cx2 = b.x - dx * 0.4, cy2 = b.y;
+  const path = svgEl('path', {
+    d: `M${a.x},${a.y} C${cx1},${cy1} ${cx2},${cy2} ${b.x},${b.y}`,
+    fill: 'none', stroke: COLORS[e.kind] || COLORS.normal,
+    'stroke-width': e.kind === 'critical' ? 2 : 1.5,
+    'stroke-opacity': e.kind === 'normal' ? 0.5 : 0.8,
+    'stroke-dasharray': e.kind === 'db' ? '4,3' : 'none',
+    'marker-end': `url(#arrow-${e.kind})`,
+    class: `edge edge-${e.tag || 'all'}`,
+  }, edgeGroup);
+  edgeEls[i] = path;
+
+  if (e.label) {
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    svgEl('text', {
+      x: mx, y: my - 4,
+      'text-anchor': 'middle', fill: '#555',
+      'font-size': '9', 'font-family': 'system-ui, sans-serif',
+      class: `edge-label edge-${e.tag || 'all'}`,
+      'pointer-events': 'none'
+    }, edgeGroup).textContent = e.label;
+  }
+});
+
+// Nodes
+const nodeGroup = svgEl('g', { id: 'nodes' }, svg);
+const nodeEls = {};
+nodes.forEach(n => {
+  const g = svgEl('g', {
+    transform: `translate(${n.x},${n.y})`,
+    class: `node node-${n.cluster}`,
+    style: 'cursor:pointer',
+    'data-id': n.id
+  }, nodeGroup);
+  nodeEls[n.id] = g;
+
+  const borderColor = n.critical ? 'var(--critical)' : n.color;
+  svgEl('rect', {
+    width: n.w, height: n.h, rx: 6,
+    fill: '#1a1a1a', stroke: borderColor,
+    'stroke-width': n.critical ? 1.5 : 1,
+  }, g);
+
+  // Color dot
+  svgEl('circle', { cx: 10, cy: 14, r: 4, fill: n.color }, g);
+
+  const label = svgEl('text', {
+    x: 20, y: 14,
+    'dominant-baseline': 'middle',
+    fill: '#e8e8e8', 'font-size': '11', 'font-weight': '600',
+    'font-family': 'system-ui, sans-serif',
+    'pointer-events': 'none'
+  }, g);
+  label.textContent = n.label.length > 19 ? n.label.slice(0, 19) + '…' : n.label;
+
+  if (n.sub) {
+    const sub = svgEl('text', {
+      x: 20, y: 30,
+      'dominant-baseline': 'middle',
+      fill: '#666', 'font-size': '9',
+      'font-family': 'system-ui, sans-serif',
+      'pointer-events': 'none'
+    }, g);
+    sub.textContent = n.sub.length > 26 ? n.sub.slice(0, 26) + '…' : n.sub;
+  }
+
+  g.addEventListener('click', () => selectNode(n.id));
+});
+
+// ─────────────────────────────────────────────────────────────
+// SELECTION
+// ─────────────────────────────────────────────────────────────
+let selectedNode = null;
+
+function selectNode(id) {
+  selectedNode = id;
+  const n = nodes.find(n => n.id === id);
+  if (!n) return;
+
+  // Highlight
+  Object.values(nodeEls).forEach(g => g.querySelector('rect').setAttribute('stroke-opacity','0.4'));
+  nodeEls[id].querySelector('rect').setAttribute('stroke-opacity','1');
+
+  // Sidebar
+  const conns = CONNECTS[id] || { out: [], in: [] };
+  const desc = DESCRIPTIONS[id] || n.sub || '';
+
+  let outHtml = conns.out.map(e => `<li>${e.kind !== 'normal' ? `<strong>[${e.kind}]</strong> ` : ''}→ <span>${e.to}</span>${e.label ? ` (${e.label})` : ''}</li>`).join('');
+  let inHtml  = conns.in.map(e =>  `<li>← <span>${e.from}</span>${e.label ? ` (${e.label})` : ''}</li>`).join('');
+
+  document.getElementById('sidebar-content').innerHTML = `
+    <div class="sb-node-title">${n.label}</div>
+    <div class="sb-node-sub">${n.cluster} · ${n.sub || ''}</div>
+    ${desc ? `<div class="sb-section"><div class="sb-section-label">What it does</div><div class="sb-desc">${desc}</div></div>` : ''}
+    ${outHtml ? `<div class="sb-section"><div class="sb-section-label">Calls / writes to</div><ul class="sb-edge-list">${outHtml}</ul></div>` : ''}
+    ${inHtml  ? `<div class="sb-section"><div class="sb-section-label">Called / read by</div><ul class="sb-edge-list">${inHtml}</ul></div>` : ''}
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────
+// FILTER CHIPS
+// ─────────────────────────────────────────────────────────────
+const FILTER_TAGS = {
+  all:    null,
+  parse:  'parse',
+  rules:  'rules',
+  db:     'db',
+  render: 'render',
+  admin:  'admin',
+};
+
+const CLUSTER_TAGS = {
+  parse:  ['parse'],
+  rules:  ['rules'],
+  db:     ['db', 'ext', 'admin'],
+  render: ['render', 'ui', 'state'],
+  admin:  ['admin', 'ext'],
+};
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const f = chip.dataset.filter;
+    applyFilter(f);
+  });
+});
+
+function applyFilter(f) {
+  const allNodeEls = document.querySelectorAll('.node');
+  const allEdgeEls = document.querySelectorAll('.edge');
+  const allLabelEls = document.querySelectorAll('.edge-label');
+
+  if (f === 'all') {
+    allNodeEls.forEach(el => el.style.opacity = '1');
+    allEdgeEls.forEach(el => el.style.opacity = '1');
+    allLabelEls.forEach(el => el.style.opacity = '1');
+    return;
+  }
+
+  const activeClusters = new Set(CLUSTER_TAGS[f] || []);
+  const activeTag = FILTER_TAGS[f];
+
+  allNodeEls.forEach(el => {
+    const id = el.getAttribute('data-id');
+    const n = nodes.find(n => n.id === id);
+    el.style.opacity = n && activeClusters.has(n.cluster) ? '1' : '0.08';
+  });
+
+  allEdgeEls.forEach(el => {
+    el.style.opacity = activeTag ? (el.classList.contains(`edge-${activeTag}`) ? '1' : '0.04') : '1';
+  });
+  allLabelEls.forEach(el => {
+    el.style.opacity = activeTag ? (el.classList.contains(`edge-${activeTag}`) ? '1' : '0.04') : '1';
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// PAN + ZOOM
+// ─────────────────────────────────────────────────────────────
+const wrap = document.getElementById('canvasWrap');
+let tx = 0, ty = 0, scale = 1;
+let dragging = false, startX, startY, startTX, startTY;
+
+function applyTransform() {
+  svg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  svg.style.transformOrigin = '0 0';
+}
+
+wrap.addEventListener('mousedown', e => {
+  if (e.target.closest('.node')) return;
+  dragging = true; startX = e.clientX; startY = e.clientY; startTX = tx; startTY = ty;
+  wrap.classList.add('grabbing');
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  tx = startTX + (e.clientX - startX);
+  ty = startTY + (e.clientY - startY);
+  applyTransform();
+});
+window.addEventListener('mouseup', () => { dragging = false; wrap.classList.remove('grabbing'); });
+
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = e.deltaY < 0 ? 1.1 : 0.9;
+  const rect = wrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  tx = mx - (mx - tx) * delta;
+  ty = my - (my - ty) * delta;
+  scale = Math.max(0.2, Math.min(3, scale * delta));
+  applyTransform();
+}, { passive: false });
+
+// Initial fit
+const FIT_SCALE = Math.min(
+  (wrap.clientWidth - 20) / SVG_W,
+  (window.innerHeight - 120) / SVG_H
+) * 0.92;
+scale = FIT_SCALE;
+tx = (wrap.clientWidth - SVG_W * scale) / 2;
+ty = 10;
+applyTransform();
+</script>
+</body>
+</html>
