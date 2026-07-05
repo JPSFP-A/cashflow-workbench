@@ -67,7 +67,9 @@
     if (!sb) return;
     try {
       const t0 = Date.now();
-      const { error } = await sb.from('fpa_dim_period').select('id').limit(1).single();
+      // Dedicated no-data ping RPC, not a real table read — the health check
+      // must not depend on RLS/data permissions, only on DB reachability.
+      const { error } = await sb.rpc('jps_health_ping');
       const ms = Date.now() - t0;
       if (error) throw error;
 
