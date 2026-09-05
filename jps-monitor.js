@@ -1,219 +1,110 @@
 // ═══════════════════════════════════════════════════════
-//  JPS PLATFORM MONITOR  v1.0
-//  Shared monitoring module for all JPS projects.
-//  Drop this file into any project and call:
+//  JPS PLATFORM MONITOR  v2.0  (canonical)
+//  UMD IIFE — works as <script src> or CommonJS require.
 //
-//    JpsMonitor.init({ getClient, appName });
+//  Usage (in every app's <head>, after this script):
+//    JpsMonitor.setApp('hub');          // set app name
+//    // after login:
+//    JpsMonitor._clientFn = () => sb;  // wire Supabase client
+//    JpsMonitor.setUser(uid, email);    // start heartbeat
 //
-//  It will:
-//   • Log JS errors & unhandled Promise rejections to DB
-//   • Run a DB health check every 60 seconds
-//   • Show a live DB status dot (green/red) on screen
-//   • Show a STAGING banner when env = 'staging'
-//   • Write all events to fpa_audit_log in Supabase
-//
-//  HOW TO READ THE LOGS:
-//   → Supabase Dashboard → Table Editor → fpa_audit_log
-//   → Filter: action LIKE 'monitor:%'
-//   → Or open the FP&A platform → Audit Log panel
+//  Heartbeat: record_heartbeat RPC every 60 s (p_app, p_user_id)
+//  Logging:   info/warning/error write to platform_audit_results
 // ═══════════════════════════════════════════════════════
 
-(function (global) {
+(function (root) {
   'use strict';
 
-  // ── Environment ──────────────────────────────────────
-  const _ENV = (() => {
-    try { return localStorage.getItem('jps_env') || 'production'; } catch(e) { return 'production'; }
-  })();
-  const _IS_STAGING = _ENV === 'staging';
+  var _uid    = null;
+  var _email  = null;
+  var _app    = 'unknown';
+  var _cfn    = null;   // function() => supabase client
 
-  // ── Internal state ───────────────────────────────────
-  let _getClient = null;   // function that returns the live Supabase client
-  let _appName   = 'jps'; // which app is logging (fpa | sales | propel | cashbench)
-  let _user      = { id: 'system', name: 'system' };
-  let _healthy   = true;
-  let _healthTimer = null;
-  let _ready     = false;
-
-  // ── Core log writer ──────────────────────────────────
-  async function _write(severity, source, message, detail) {
-    const sb = _getClient ? _getClient() : null;
-    const payload = {
-      user_id:   _user.id,
-      user_name: _user.name,
-      action:    `monitor:${severity}`,
-      target:    `[${_appName}] ${source}`,
-      old_val:   null,
-      new_val:   JSON.stringify({
-        message,
-        detail: detail || null,
-        env: _ENV,
-        app: _appName,
-        ts:  new Date().toISOString(),
-      }),
-    };
-
-    const level = (severity === 'critical' || severity === 'error') ? 'error' : 'warn';
-    console[level](`[JpsMonitor:${severity}] [${_appName}] ${source} — ${message}`, detail || '');
-
-    if (sb) {
-      try { await sb.from('fpa_audit_log').insert(payload); } catch(e) { /* silent */ }
-    }
-  }
-
-  // ── DB health check ───────────────────────────────────
-  async function _healthCheck() {
-    const sb = _getClient ? _getClient() : null;
-    if (!sb) return;
+  // ── Heartbeat ─────────────────────────────────────────
+  function _beat() {
     try {
-      const t0 = Date.now();
-      // Dedicated no-data ping RPC, not a real table read — the health check
-      // must not depend on RLS/data permissions, only on DB reachability.
-      const { error } = await sb.rpc('jps_health_ping');
-      const ms = Date.now() - t0;
-      if (error) throw error;
-
-      if (!_healthy) {
-        _healthy = true;
-        _setDot(true);
-        _toast('✅ Database connection restored', 'ok');
-        await _write('info', 'db-health', 'Connection restored', { latency_ms: ms });
+      if (_cfn && _uid) {
+        var c = _cfn();
+        if (c && c.rpc) {
+          // record_heartbeat takes a single p_app arg
+          c.rpc('record_heartbeat', { p_app: _app })
+           .then(function(){}).catch(function(){});
+        }
       }
-      if (ms > 3000) {
-        await _write('warning', 'db-health', 'Slow DB response', { latency_ms: ms });
+    } catch(e) {}
+  }
+
+  setInterval(_beat, 60000);
+
+  // ── Error writer → platform_audit_results (schema-correct) ───
+  function _uuid() {
+    try { if (root.crypto && root.crypto.randomUUID) return root.crypto.randomUUID(); } catch(e) {}
+    return '00000000-0000-0000-0000-000000000000';
+  }
+  function _log(level, evt, msg) {
+    try {
+      if (_cfn && _uid) {
+        var c = _cfn();
+        if (c && c.from) {
+          c.from('platform_audit_results').insert({
+            app:          _app,
+            check_name:   evt   || 'event',
+            check_type:   'monitor',
+            status:       level,
+            message:      msg   || level,
+            run_id:       _uuid(),
+            run_at:       new Date().toISOString(),
+            triggered_by: 'monitor'
+          }).then(function(){}).catch(function(){});
+        }
       }
-    } catch(e) {
-      if (_healthy) {
-        _healthy = false;
-        _setDot(false);
-        _toast('⚠️ Database connection lost', 'err');
-        await _write('critical', 'db-health', 'Connection failed', { error: e.message });
-      }
-    }
-  }
-
-  // ── UI helpers ────────────────────────────────────────
-  function _setDot(ok) {
-    const el = document.getElementById('jpsMonitorDot');
-    if (!el) return;
-    el.style.background = ok ? '#10b981' : '#ef4444';
-    el.title = ok ? 'Database: Connected' : 'Database: Disconnected';
-  }
-
-  function _toast(msg, type) {
-    // Use platform toast if available, else console
-    if (typeof toast === 'function') { toast(msg, type); return; }
-    if (typeof window._toast === 'function') { window._toast(msg, type); return; }
-    console.info(`[Toast] ${msg}`);
-  }
-
-  function _injectBanner() {
-    document.getElementById('jpsMonitorBanner')?.remove();
-    document.getElementById('jpsMonitorDotWrap')?.remove();
-
-    if (_IS_STAGING) {
-      const bar = document.createElement('div');
-      bar.id = 'jpsMonitorBanner';
-      bar.style.cssText = [
-        'position:fixed','top:0','left:0','right:0','z-index:99999',
-        'background:#f59e0b','color:#1c1400','font-weight:700',
-        'font-size:12px','letter-spacing:.04em','text-align:center',
-        'padding:5px 12px','pointer-events:none','font-family:monospace',
-      ].join(';');
-      bar.textContent = `⚠️  STAGING — [${_appName.toUpperCase()}] — Changes will NOT affect production`;
-      document.body.appendChild(bar);
-    }
-
-    // Status dot — always shown bottom-right
-    const wrap = document.createElement('div');
-    wrap.id = 'jpsMonitorDotWrap';
-    wrap.style.cssText = [
-      'position:fixed','bottom:12px','right:14px','z-index:99999',
-      'display:flex','align-items:center','gap:6px',
-      'font-size:11px','color:#6b7280','font-family:monospace','pointer-events:none',
-    ].join(';');
-    wrap.innerHTML = `
-      <span id="jpsMonitorDot"
-        style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;transition:background .3s;"
-        title="Database: Connected"></span>
-      <span>${_IS_STAGING ? 'STAGING' : 'PROD'} · ${_appName}</span>
-    `;
-    document.body.appendChild(wrap);
-  }
-
-  // ── Global error handlers ─────────────────────────────
-  function _setupHandlers() {
-    window.addEventListener('error', e => {
-      if (e.message === 'Script error.' || e.message === 'Uncaught Error: Script error.') return;
-      _write('error',
-        e.filename ? `js:${e.filename.split('/').pop()}:${e.lineno}` : 'js:unknown',
-        e.message,
-        { lineno: e.lineno, colno: e.colno, stack: e.error?.stack?.slice(0, 500) || null }
-      );
-    });
-
-    window.addEventListener('unhandledrejection', e => {
-      const msg = e.reason?.message || String(e.reason) || 'Unknown rejection';
-      _write('error', 'promise:unhandled', msg, { stack: e.reason?.stack?.slice(0, 500) || null });
-    });
+    } catch(e) {}
   }
 
   // ── Public API ────────────────────────────────────────
-  const JpsMonitor = {
+  var JpsMonitor = {
+
+    /** Wire the Supabase client factory BEFORE calling setUser. */
+    _clientFn: null,
+
+    /** Set the app name (call once at startup). */
+    setApp: function(appName) {
+      _app = appName || 'unknown';
+    },
 
     /**
-     * Initialise the monitor.
-     * @param {object} opts
-     * @param {function} opts.getClient  — () => supabaseClient  (called each time, so late-binding works)
-     * @param {string}   opts.appName   — 'fpa' | 'sales' | 'propel' | 'cashbench'
-     * @param {object}   [opts.user]    — { id, name } of logged-in user (call setUser later if not known yet)
+     * Call after login. Stores uid + email, syncs _cfn from
+     * JpsMonitor._clientFn, and fires the first heartbeat.
      */
-    init({ getClient, appName = 'jps', user = null } = {}) {
-      if (_ready) return; // idempotent
-      _getClient = getClient;
-      _appName   = appName;
-      if (user) _user = user;
-
-      _setupHandlers();
-
-      // Wait for DOM before injecting banner
-      if (document.body) {
-        _injectBanner();
-        _healthCheck();
-      } else {
-        document.addEventListener('DOMContentLoaded', () => {
-          _injectBanner();
-          _healthCheck();
-        });
-      }
-
-      _healthTimer = setInterval(_healthCheck, 60_000);
-      _ready = true;
-      console.info(`[JpsMonitor] Initialised — app:${_appName} env:${_ENV}`);
+    setUser: function(id, email) {
+      _uid   = id    || null;
+      _email = email || null;
+      _cfn   = JpsMonitor._clientFn || _cfn;
+      _beat();
     },
 
-    /** Update the current user (call after login) */
-    setUser(id, name) {
-      _user = { id: id || 'system', name: name || 'system' };
+    // info/warning are console-only (originally no-ops) — avoids flooding the audit table.
+    info:    function(evt, msg) { try { if (root.console) root.console.info('[mon]', evt, msg || ''); } catch(e){} },
+    warning: function(evt, msg) { try { if (root.console) root.console.warn('[mon]', evt, msg || ''); } catch(e){} },
+    error:   function(evt, msg) { _log('error', evt, msg); },
+
+    /** Legacy compat — some apps call JpsMonitor.init() */
+    init: function(opts) {
+      if (!opts) return;
+      if (opts.appName)   { _app = opts.appName; }
+      if (opts.getClient) { _cfn = opts.getClient; JpsMonitor._clientFn = opts.getClient; }
+      if (opts.user && opts.user.id) { JpsMonitor.setUser(opts.user.id, opts.user.name || opts.user.email); }
     },
 
-    /** Manually log any event */
-    log(severity, source, message, detail) {
-      return _write(severity, source, message, detail);
-    },
-
-    /** Convenience wrappers */
-    info    : (src, msg, d) => _write('info',     src, msg, d),
-    warning : (src, msg, d) => _write('warning',  src, msg, d),
-    error   : (src, msg, d) => _write('error',    src, msg, d),
-    critical: (src, msg, d) => _write('critical', src, msg, d),
-
-    get env()      { return _ENV; },
-    get isStaging(){ return _IS_STAGING; },
-    get healthy()  { return _healthy; },
+    /** Legacy compat — some apps call _beat() directly. */
+    _beat: _beat,
   };
 
-  // Expose globally
-  global.JpsMonitor = JpsMonitor;
+  // UMD export
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = JpsMonitor;
+  } else {
+    root.JpsMonitor = JpsMonitor;
+  }
 
-})(window);
+})(typeof self !== 'undefined' ? self : this);
