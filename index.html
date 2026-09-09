@@ -1164,6 +1164,9 @@
       window.JpsAuth ? JpsAuth.clientOptions() : undefined
     );
     try { if (window.JpsNav) JpsNav.bind(window.APP_SUPABASE_CLIENT); } catch(e){ console.warn('JpsNav bind failed', e); }
+    // Mitigates a refresh-token race across the shared-SSO-cookie platform apps --
+    // see JpsAuth.startSessionSync's own comment in jps-auth.js for the full mechanism.
+    try { if (window.JpsAuth && window.JpsAuth.startSessionSync) JpsAuth.startSessionSync(window.APP_SUPABASE_CLIENT); } catch(e){ console.warn('JpsAuth.startSessionSync failed', e); }
   </script>
   <script src="./jps-monitor.js"></script>
   <script>
