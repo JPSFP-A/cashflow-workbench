@@ -1329,15 +1329,21 @@ if (window.cashflowApp && window.cashflowApp.init) window.cashflowApp.init();
         if (window.JpsMonitor) JpsMonitor.setUser(userId, profile?.full_name || email);
         launch(profile?.full_name || email);
         _cwbInitPresence(sb, email, access?.role || 'viewer');
-        // Login audit — write to unified fpa_audit_log
-        sb.from('fpa_audit_log').insert({
-          user_id:   userId,
-          user_name: profile?.full_name || email,
-          user_role: access?.role || '—',
-          app:       'cash',
-          action:    'login',
-          target:    'session',
-          new_val:   JSON.stringify({ email, role: access?.role }),
+        // Login audit — write to unified fpa_audit_log, routed through the
+        // write-audit-log Edge Function so ip_address (from the real
+        // request) and user_id (from the verified JWT) can't be spoofed.
+        sb.functions.invoke('write-audit-log', {
+          body: {
+            table: 'fpa_audit_log',
+            fields: {
+              user_name: profile?.full_name || email,
+              user_role: access?.role || '—',
+              app:       'cash',
+              action:    'login',
+              target:    'session',
+              new_val:   JSON.stringify({ email, role: access?.role }),
+            },
+          },
         }).catch(() => {});
         return true;
       }
