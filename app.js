@@ -1291,11 +1291,14 @@
   // ── Edge function helper ──────────────────────────────────────────
   async function callEdgeFn(action, payload = {}) {
     const url = `${window.APP_CONFIG.supabaseUrl}/functions/v1/cashflow-approval`;
+    const { data: { session } } = await state.supabase.auth.getSession();
+    if (!session) throw new Error("Session expired. Sign in again.");
     const res = await fetchWithRetry(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": window.APP_CONFIG.supabaseAnonKey
+        "apikey": window.APP_CONFIG.supabaseAnonKey,
+        "Authorization": `Bearer ${session.access_token}`
       },
       body: JSON.stringify({ action, ...payload })
     });
