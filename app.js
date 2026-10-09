@@ -635,7 +635,7 @@
       { label: "Vendor",        key: "vendor" },
       { label: "Pay Group",     key: "pay_group" },
       { label: "Mapped Cat",    key: "cashbook_category" },
-      { label: "Description",   key: "description" },
+      { label: "Description",   key: "description", render: descCell },
       { label: "Dr/Cr",         key: "signed_amount", num: false, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
       { label: "Amount",        key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(Math.abs(s))}</span>`; } },
       { label: "Rule",          key: "mapping_rule" }
@@ -702,6 +702,12 @@
     table("cashbookCheckTable",  heads, grpCb);   addTotals("cashbookCheckTable",  grpCb);
   }
 
+  // The cashbook account report cuts descriptions at 11 characters; show the batch name beside a cut one.
+  function descCell(r) {
+    const cut = r.data_source === "Cashbook" && String(r.description || "").length === 11 && r.batch_name;
+    return cut ? `${esc(r.description)}… <span style="color:var(--muted)" title="Description cut off in the source report">· ${esc(r.batch_name)}</span>` : esc(r.description);
+  }
+
   function renderExceptions() {
     const q = norm($("searchInput").value);
     const rows = state.records
@@ -736,7 +742,7 @@
       { label: "PO #",       key: "po_no" },
       { label: "Bank Acct",  key: "bank_account" },
       { label: "Line #",     key: "line_no" },
-      { label: "Description",key: "description" },
+      { label: "Description",key: "description", render: descCell },
       { label: "Amount USD", key: "amount", num: true, render: (r) => money(r.amount) },
       { label: "Orig (JMD)", key: "amount_original", num: true, render: (r) => r.amount_original ? money(r.amount_original) : "" },
       { label: "Amt Paid",   key: "amount_paid",   num: true, render: (r) => r.amount_paid   ? money(r.amount_paid)   : "" },
@@ -886,11 +892,7 @@
       { label: "Job #",     key: "jobno" },
       { label: "Vendor",    key: "vendor" },
       { label: "Pay Group", key: "pay_group" },
-      { label: "Description", key: "description", render: (r) => {
-        // The cashbook account report cuts descriptions at 11 characters; show the batch name beside a cut one.
-        const cut = r.data_source === "Cashbook" && String(r.description || "").length === 11 && r.batch_name;
-        return cut ? `${esc(r.description)}… <span style="color:var(--muted)" title="Description cut off in the source report">· ${esc(r.batch_name)}</span>` : esc(r.description);
-      } },
+      { label: "Description", key: "description", render: descCell },
       { label: "Dr/Cr",    key: "signed_amount", render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
       { label: "Net (US$)", key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(s)}</span>`; } },
       { label: "Category",  key: "cashbook_category" },
