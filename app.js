@@ -226,7 +226,10 @@
       // Always: first 5 cols = source..account; last 2 = debit/credit
       const source        = vals[0];
       const category_code = vals[1];
-      const batch_name    = vals[2];
+      // The description report prints batch names one column left of its dash line, which
+      // would drop the first character. A non-space just before the span means that shift.
+      const bStart        = spans[2][0];
+      const batch_name    = (line[bStart - 1] && line[bStart - 1] !== " ") ? line.slice(bStart - 1, spans[2][1]).trim() : vals[2];
       const je_name       = vals[3];
       // GL account is fixed-width and may be wider than the column boundary.
       // Read the full dotted account string from the raw line starting at the
@@ -276,18 +279,21 @@
     if (!descRows.length) return acctRows;
     if (!acctRows.length) return descRows;
 
-    // Build description lookup; use a counter per key to handle duplicate keys in order
+    // Build description lookup; use a counter per key to handle duplicate keys in order.
+    // The two reports print batch names at different widths, so only the first 28 characters
+    // are compared, and the amounts are part of the key so rows in one batch pair up correctly.
+    const keyOf = (r) => `${String(r.batch_name || "").slice(0, 28).trim()}|${r.je_name}|${r.source}|${r.category_code}|${r.debit_usd}|${r.credit_usd}`;
     const descCounts = new Map();
     const descByKey = new Map();
     for (const r of descRows) {
-      const k = `${r.batch_name}|${r.je_name}|${r.source}|${r.category_code}`;
+      const k = keyOf(r);
       const n = (descCounts.get(k) || 0);
       descCounts.set(k, n + 1);
       descByKey.set(`${k}#${n}`, r);
     }
     const acctCounts = new Map();
     return acctRows.map((row) => {
-      const k = `${row.batch_name}|${row.je_name}|${row.source}|${row.category_code}`;
+      const k = keyOf(row);
       const n = (acctCounts.get(k) || 0);
       acctCounts.set(k, n + 1);
       const desc = descByKey.get(`${k}#${n}`);
@@ -880,7 +886,11 @@
       { label: "Job #",     key: "jobno" },
       { label: "Vendor",    key: "vendor" },
       { label: "Pay Group", key: "pay_group" },
-      { label: "Description", key: "description" },
+      { label: "Description", key: "description", render: (r) => {
+        // The cashbook account report cuts descriptions at 11 characters; show the batch name beside a cut one.
+        const cut = r.data_source === "Cashbook" && String(r.description || "").length === 11 && r.batch_name;
+        return cut ? `${esc(r.description)}… <span style="color:var(--muted)" title="Description cut off in the source report">· ${esc(r.batch_name)}</span>` : esc(r.description);
+      } },
       { label: "Dr/Cr",    key: "signed_amount", render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
       { label: "Net (US$)", key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(s)}</span>`; } },
       { label: "Category",  key: "cashbook_category" },
