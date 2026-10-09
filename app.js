@@ -147,7 +147,71 @@
   }
 
   function table(id, heads, rows) {
-    $(id).innerHTML = `<thead><tr>${heads.map((h) => `<th>${esc(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr>${heads.map((h) => `<td class="${h.num ? "num" : ""}">${h.render ? h.render(r, i) : esc(r[h.key])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    $(id).innerHTML = `<thead><tr>${heads.map((h) => `<th>${esc(h.label)}<span class="col-resizer"></span></th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr>${heads.map((h) => `<td class="${h.num ? "num" : ""}">${h.render ? h.render(r, i) : esc(r[h.key])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    enableColumnResize($(id), id);
+  }
+
+  // Drag the right edge of a header to resize that column. Widths are remembered per table in this
+  // browser, and double-clicking an edge clears the saved widths for that table.
+  const COL_MIN = 48, COL_MAX = 900;
+  function colStoreKey(id) { return `cwb.colwidths.${id}`; }
+  function loadColWidths(id) {
+    try { return JSON.parse(localStorage.getItem(colStoreKey(id)) || "{}") || {}; } catch { return {}; }
+  }
+  function saveColWidths(id, widths) {
+    try { localStorage.setItem(colStoreKey(id), JSON.stringify(widths)); } catch { /* storage unavailable */ }
+  }
+  function applyColWidths(tableEl, widths) {
+    const ths = [...tableEl.querySelectorAll("thead th")];
+    ths.forEach((th, i) => { th.style.width = th.style.minWidth = th.style.maxWidth = widths[i] ? `${widths[i]}px` : ""; });
+    const total = ths.reduce((sum, th, i) => sum + (widths[i] || th.offsetWidth), 0);
+    tableEl.style.tableLayout = "fixed";
+    tableEl.classList.add("cw-fixed");
+    tableEl.style.width = `${total}px`;
+  }
+  function enableColumnResize(tableEl, id) {
+    if (!tableEl) return;
+    const saved = loadColWidths(id);
+    const ths = [...tableEl.querySelectorAll("thead th")];
+    const frozen = ths.length && ths.every((_, i) => saved[i]);
+    if (frozen) applyColWidths(tableEl, saved);
+    else { tableEl.style.tableLayout = ""; tableEl.style.width = ""; tableEl.classList.remove("cw-fixed"); }
+
+    ths.forEach((th, i) => {
+      const grip = th.querySelector(".col-resizer");
+      if (!grip) return;
+      grip.addEventListener("dblclick", () => {
+        try { localStorage.removeItem(colStoreKey(id)); } catch { /* ignore */ }
+        ths.forEach((t) => { t.style.width = t.style.minWidth = t.style.maxWidth = ""; });
+        tableEl.style.tableLayout = ""; tableEl.style.width = ""; tableEl.classList.remove("cw-fixed");
+      });
+      grip.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Freeze every column at its current width first, so only the dragged one moves.
+        const widths = ths.map((t) => Math.round(t.getBoundingClientRect().width));
+        applyColWidths(tableEl, widths);
+        const startX = e.clientX, startW = widths[i];
+        // A page-wide cover keeps the drag from selecting text or hovering other elements.
+        const cover = document.createElement("div");
+        cover.style.cssText = "position:fixed;inset:0;z-index:99999;cursor:col-resize";
+        document.body.appendChild(cover);
+        grip.classList.add("active");
+        const onMove = (ev) => {
+          widths[i] = Math.max(COL_MIN, Math.min(COL_MAX, Math.round(startW + ev.clientX - startX)));
+          applyColWidths(tableEl, widths);
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          cover.remove();
+          grip.classList.remove("active");
+          saveColWidths(id, widths);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    });
   }
 
   function download(name, content, type) {
@@ -635,7 +699,7 @@
       { label: "Vendor",        key: "vendor" },
       { label: "Pay Group",     key: "pay_group" },
       { label: "Mapped Cat",    key: "cashbook_category" },
-      { label: "Description",   key: "description", render: descCell },
+      { label: "Description",   key: "description" },
       { label: "Dr/Cr",         key: "signed_amount", num: false, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
       { label: "Amount",        key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(Math.abs(s))}</span>`; } },
       { label: "Rule",          key: "mapping_rule" }
@@ -702,12 +766,6 @@
     table("cashbookCheckTable",  heads, grpCb);   addTotals("cashbookCheckTable",  grpCb);
   }
 
-  // The cashbook account report cuts descriptions at 11 characters; show the batch name beside a cut one.
-  function descCell(r) {
-    const cut = r.data_source === "Cashbook" && String(r.description || "").length === 11 && r.batch_name;
-    return cut ? `${esc(r.description)}… <span style="color:var(--muted)" title="Description cut off in the source report">· ${esc(r.batch_name)}</span>` : esc(r.description);
-  }
-
   function renderExceptions() {
     const q = norm($("searchInput").value);
     const rows = state.records
@@ -742,7 +800,7 @@
       { label: "PO #",       key: "po_no" },
       { label: "Bank Acct",  key: "bank_account" },
       { label: "Line #",     key: "line_no" },
-      { label: "Description",key: "description", render: descCell },
+      { label: "Description",key: "description" },
       { label: "Amount USD", key: "amount", num: true, render: (r) => money(r.amount) },
       { label: "Orig (JMD)", key: "amount_original", num: true, render: (r) => r.amount_original ? money(r.amount_original) : "" },
       { label: "Amt Paid",   key: "amount_paid",   num: true, render: (r) => r.amount_paid   ? money(r.amount_paid)   : "" },
@@ -892,7 +950,7 @@
       { label: "Job #",     key: "jobno" },
       { label: "Vendor",    key: "vendor" },
       { label: "Pay Group", key: "pay_group" },
-      { label: "Description", key: "description", render: descCell },
+      { label: "Description", key: "description" },
       { label: "Dr/Cr",    key: "signed_amount", render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${s >= 0 ? "Dr" : "Cr"}</span>`; } },
       { label: "Net (US$)", key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? 'var(--red)' : 'inherit'}">${money(s)}</span>`; } },
       { label: "Category",  key: "cashbook_category" },

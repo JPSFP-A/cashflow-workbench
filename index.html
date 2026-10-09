@@ -314,6 +314,13 @@
          text-transform: uppercase; letter-spacing: .04em; color: var(--muted); z-index: 1; }
     tr:hover td { background: #f6f9fd; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
+    /* Column resize grip: a wide hit area with a thin visible line */
+    th { box-sizing: border-box; }
+    th .col-resizer { position: absolute; top: 0; right: -6px; width: 12px; height: 100%; cursor: col-resize; z-index: 2; user-select: none; }
+    th .col-resizer::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 5px; width: 2px; border-radius: 1px; background: transparent; }
+    th:hover .col-resizer::after, th .col-resizer.active::after { background: #9db3c8; }
+    th .col-resizer:hover::after { background: var(--teal, #0d7377); }
+    table.cw-fixed td { overflow-wrap: anywhere; }
 
     /* ── Exception badges ─────────────────────────────────────────── */
     .exc-badge { display: inline-block; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
