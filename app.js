@@ -662,13 +662,21 @@
     if (un) {
       const amt = Number(un.amount || 0);
       const unColor = amt < 0 ? "var(--red)" : "var(--teal)";
-      bodyRows.push(`<tr style="background:#fff4d6;border-top:2px solid #f0c75e">
+      // What the bank explains, one row each. In the direct cash flow they all roll into Supplier / contractor.
+      const items = Array.isArray(un.items) ? un.items : [];
+      items.forEach((it, i) => {
+        const a = Number(it.amount || 0);
+        bodyRows.push(`<tr style="background:#fffaf0;${i === 0 ? "border-top:2px solid #f0c75e" : ""}">
+          <td style="padding-left:20px">${esc(it.label || "Reconciling item")} <span style="color:var(--muted);font-size:11px">(into ${esc(it.rolled_into || "Supplier / contractor")})</span></td>
+          <td class="num">${money(a)}</td><td class="num">${money(a / 1000)}</td><td class="num"></td></tr>`);
+      });
+      bodyRows.push(`<tr style="background:#fff4d6;${items.length ? "" : "border-top:2px solid #f0c75e"}">
         <td style="font-weight:700;color:var(--navy)">Unexplained variance to balance sheet</td>
         <td class="num" style="font-weight:700;color:${unColor}">${money(amt)}</td>
         <td class="num" style="font-weight:700;color:${unColor}">${money(amt / 1000)}</td>
         <td class="num"></td>
       </tr>
-      <tr><td colspan="4" style="color:var(--muted);font-size:11.5px;padding:4px 12px 8px">Balance sheet cash moved from ${money(Number(un.opening_cash || 0) / 1000)} to ${money(Number(un.closing_cash || 0) / 1000)} (US$'000). This is the part of that movement the lines above do not explain. Set by ${esc(un.set_by || "the month-end close")}${un.set_at ? " on " + esc(String(un.set_at).slice(0, 10)) : ""}.</td></tr>`);
+      <tr><td colspan="4" style="color:var(--muted);font-size:11.5px;padding:4px 12px 8px">Balance sheet cash moved from ${money(Number(un.opening_cash || 0) / 1000)} to ${money(Number(un.closing_cash || 0) / 1000)} (US$'000). The rows above explain what the bank accounts show beyond the cash flow lines; this row is what none of them explains. Set by ${esc(un.set_by || "the month-end close")}${un.set_at ? " on " + esc(String(un.set_at).slice(0, 10)) : ""}.</td></tr>`);
     }
 
     tbl.innerHTML = `<thead><tr><th>Cash Flow (US$'000)</th><th class="num">US$</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${bodyRows.join("")}</tbody>`;
@@ -1650,7 +1658,7 @@
   async function loadUnexplained(monthKey) {
     state.unexplained = null;
     const { data, error } = await state.supabase.from("cashflow_unexplained")
-      .select("month_key,amount,opening_cash,closing_cash,net_flows,note,set_by,set_at").eq("month_key", monthKey).maybeSingle();
+      .select("month_key,amount,opening_cash,closing_cash,net_flows,note,items,set_by,set_at").eq("month_key", monthKey).maybeSingle();
     if (error) { console.error("cashflow_unexplained", error); return error.message; }
     state.unexplained = data || null;
     return "";
