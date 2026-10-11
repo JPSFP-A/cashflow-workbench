@@ -49,7 +49,7 @@
 
 
   const state = {
-    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [], sections: [], accountFilters: [],
+    supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [], sections: [], accountFilters: [], unexplained: null,
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, multiCollapsed: new Set(), settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
@@ -656,6 +656,20 @@
       <td class="num" style="font-weight:700;color:${netColor}">${money(grandTotal / 1000)}</td>
       <td class="num"></td>
     </tr>`);
+
+    // Variance to the balance sheet, set by the FinModel month-end close. Shown on its own so it is never mistaken for a cash flow line.
+    const un = state.unexplained && state.unexplained.month_key === state.loadedMonth ? state.unexplained : null;
+    if (un) {
+      const amt = Number(un.amount || 0);
+      const unColor = amt < 0 ? "var(--red)" : "var(--teal)";
+      bodyRows.push(`<tr style="background:#fff4d6;border-top:2px solid #f0c75e">
+        <td style="font-weight:700;color:var(--navy)">Unexplained variance to balance sheet</td>
+        <td class="num" style="font-weight:700;color:${unColor}">${money(amt)}</td>
+        <td class="num" style="font-weight:700;color:${unColor}">${money(amt / 1000)}</td>
+        <td class="num"></td>
+      </tr>
+      <tr><td colspan="4" style="color:var(--muted);font-size:11.5px;padding:4px 12px 8px">Balance sheet cash moved from ${money(Number(un.opening_cash || 0) / 1000)} to ${money(Number(un.closing_cash || 0) / 1000)} (US$'000). This is the part of that movement the lines above do not explain. Set by ${esc(un.set_by || "the month-end close")}${un.set_at ? " on " + esc(String(un.set_at).slice(0, 10)) : ""}.</td></tr>`);
+    }
 
     tbl.innerHTML = `<thead><tr><th>Cash Flow (US$'000)</th><th class="num">US$</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${bodyRows.join("")}</tbody>`;
   }
@@ -1508,6 +1522,8 @@
     state.loadedAt = upsertMonth.data.last_processed_at || timestamp();
     state.loadedBy = userName();
     state.apDetailLoaded = true;  // records came from parser — all fields already in memory
+    const unErr = await loadUnexplained(monthKey);
+    if (unErr) setStatus(`The variance to the balance sheet could not be loaded: ${unErr}`, "error");
   }
 
   async function processAndSaveMonth() {
@@ -1630,6 +1646,16 @@
     }
   }
 
+  // The variance to the balance sheet for the month, if the FinModel close has set one. Returns an error message, or "".
+  async function loadUnexplained(monthKey) {
+    state.unexplained = null;
+    const { data, error } = await state.supabase.from("cashflow_unexplained")
+      .select("month_key,amount,opening_cash,closing_cash,net_flows,note,set_by,set_at").eq("month_key", monthKey).maybeSingle();
+    if (error) { console.error("cashflow_unexplained", error); return error.message; }
+    state.unexplained = data || null;
+    return "";
+  }
+
   async function loadMonth(monthKey) {
     if (state.busy) return;
     monthKey = monthKey || $("monthSelect").value;
@@ -1658,8 +1684,10 @@
       state.apDetailLoaded = false;   // reset so Exceptions tab will lazy-load detail
       state.baseDetailFilter = null;  // clear drill-down selection
       $("monthInput").value = monthKey;
+      const unErr = await loadUnexplained(monthKey);
       renderAll();
-      setStatus(`Loaded ${monthKey} — ${records.length} records`, "ok");
+      if (unErr) setStatus(`Loaded ${monthKey} — ${records.length} records. The variance to the balance sheet could not be loaded: ${unErr}`, "error");
+      else setStatus(`Loaded ${monthKey} — ${records.length} records`, "ok");
     } catch (err) {
       setStatus(err.message, "error");
     } finally {
