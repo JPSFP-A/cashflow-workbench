@@ -456,6 +456,8 @@
         && matchSingle(rule.cond3_type, rule.cond3_value,  row);
   }
 
+  const ICO = (n) => '<svg class="ic" aria-hidden="true"><use href="#i-' + n + '"/></svg>';
+
   function isAccountIncluded(fpc) {
     if (!fpc || !state.accountFilters.length) return true;
     const entry = state.accountFilters.find((a) => a.fpc === String(fpc));
@@ -504,7 +506,7 @@
       const item = map.get(name) || { name, amount: 0, lines: 0, unmapped: 0 };
       item.amount += Number(signed ? (r.signed_amount ?? r.amount ?? 0) : (r.amount || 0));
       item.lines += 1;
-      if (!r.mapped) item.unmapped += 1;
+      if (!r.mapped && !isExcludedRow(r)) item.unmapped += 1;
       map.set(name, item);
     });
     // Sort: largest absolute value first so both big inflows and big outflows surface
@@ -517,6 +519,11 @@
     if (value === "cashbook_debit") return row.role === "Inflow";
     if (value === "cashbook_credit") return row.role === "Cashbook Credit";
     return true;
+  }
+
+  // Rows on an excluded account are intentionally out of the cash flow, so they are not exceptions.
+  function isExcludedRow(r) {
+    return r.account_excluded === true || !isAccountIncluded(r.fpc);
   }
 
   function excType(r) {
@@ -541,6 +548,7 @@
       if (r.role === "Inflow") cd += Number(r.amount || 0);
       else if (r.role === "Cashbook Credit") cc += Number(r.amount || 0);
       else apNet += Number(r.signed_amount ?? -r.amount ?? 0); // signed: credits positive (reduce outflow), invoices negative
+      if (isExcludedRow(r)) return;
       if (!r.mapped) unmapped += 1;
       else if (!r.base_case_row) norow += 1;
     });
@@ -549,13 +557,13 @@
     const badge = $("excBadge");
     if (badge) { badge.textContent = exc || ""; badge.className = "tab-badge" + (exc ? " show" : ""); }
     $("kpis").innerHTML = [
-      ["AP Outflows", "US$ " + money(ap), "💸", ""],
-      ["Cashbook Debits", "US$ " + money(cd), "📥", ""],
-      ["Cashbook Credits", "US$ " + money(cc), "📤", ""],
-      ["Unmapped", String(unmapped), "⚠️", unmapped ? "bad" : "good"],
-      ["No Base Row", String(norow), "🔗", norow ? "warn" : "good"],
-      ["Total Exceptions", String(exc), "🚩", exc ? "bad" : "good"]
-    ].map(([label, val, icon, cls]) => `<div class="kpi-tile ${cls}"><div class="kpi-label">${label}</div><div class="kpi-icon">${icon}</div><div class="kpi-value">${val}</div></div>`).join("");
+      ["AP Outflows", "US$ " + money(ap), "arrow-out", ""],
+      ["Cashbook Debits", "US$ " + money(cd), "arrow-in", ""],
+      ["Cashbook Credits", "US$ " + money(cc), "arrow-out", ""],
+      ["Unmapped", String(unmapped), "alert", unmapped ? "bad" : "good"],
+      ["No Base Row", String(norow), "unlink", norow ? "warn" : "good"],
+      ["Total Exceptions", String(exc), "flag", exc ? "bad" : "good"]
+    ].map(([label, val, icon, cls]) => `<div class="kpi-tile ${cls}"><div class="kpi-label">${label}</div><div class="kpi-icon">${ICO(icon)}</div><div class="kpi-value" title="${val}">${val}</div></div>`).join("");
   }
 
   // ── Grouped base: base_case_row (main) → cashbook_category (sub) ─────────
@@ -792,7 +800,7 @@
     const q = norm($("searchInput").value);
     const rows = state.records
       .filter(sourceOk)
-      .filter((r) => !r.mapped || !r.base_case_row)
+      .filter((r) => !isExcludedRow(r) && (!r.mapped || !r.base_case_row))
       .filter((r) => !q || norm([r.vendor, r.pay_group, r.fpc, r.cost_item, r.description, r.cashbook_category, r.category_code, r.je_name].join(" ")).includes(q))
       .slice(0, 500);
 
@@ -978,7 +986,7 @@
       { label: "Category",  key: "cashbook_category" },
       { label: "Base Row",  key: "base_case_row" },
       { label: "Rule",      key: "mapping_rule" },
-      { label: "Mapped",    key: "mapped", render: (r) => r.mapped ? '<span style="color:var(--teal)">✓</span>' : '<span class="bad">✗</span>' }
+      { label: "Mapped",    key: "mapped", render: (r) => r.mapped ? '<span style="color:var(--teal)">' + ICO('check') + '</span>' : '<span class="bad">' + ICO('x') + '</span>' }
     ], rows);
   }
 
@@ -1089,7 +1097,7 @@
         <td>${esc(sg.base_case_row)}</td>
         <td>${esc(sg.sub_group)}</td>
         <td class="num">${sg.sort_order ?? "—"}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="window.cashflowApp.deleteSubGroup('${esc(sg.id)}')">✕</button></td>
+        <td><button class="btn btn-danger btn-sm" onclick="window.cashflowApp.deleteSubGroup('${esc(sg.id)}')">${ICO('x')}</button></td>
       </tr>`).join("");
     tbl.innerHTML = `<thead><tr><th>Base Row</th><th>Sub Group</th><th style="width:60px">Order</th><th style="width:50px"></th></tr></thead><tbody>${rows}</tbody>`;
   }
@@ -1146,7 +1154,7 @@
         <td>${esc(s.base_case_row)}</td>
         <td>${esc(s.section)}</td>
         <td class="num">${s.sort_order ?? "—"}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="window.cashflowApp.deleteSectionEntry('${esc(s.id)}')">✕</button></td>
+        <td><button class="btn btn-danger btn-sm" onclick="window.cashflowApp.deleteSectionEntry('${esc(s.id)}')">${ICO('x')}</button></td>
       </tr>`).join("");
     tbl.innerHTML = `<thead><tr><th>Base Row</th><th>Section</th><th style="width:60px">Order</th><th style="width:50px"></th></tr></thead><tbody>${rows}</tbody>`;
     // Refresh section name suggestions
@@ -1207,7 +1215,7 @@
       { label: "Status", key: "include", render: (a) => {
           const on  = a.include !== false;
           const cls = on ? "style=\"color:var(--green,#22c55e);font-weight:600\"" : "style=\"color:var(--red,#ef4444);font-weight:600\"";
-          return `<span ${cls}>${on ? "✔ Included" : "✖ Excluded"}</span>`;
+          return `<span ${cls}>${on ? ICO("check") + " Included" : ICO("x") + " Excluded"}</span>`;
         }
       },
       { label: "Toggle", key: "fpc", render: (a) => {
@@ -1303,7 +1311,7 @@
     if (error) return setStatus(error.message, "error");
     state.months = data || [];
     $("monthSelect").innerHTML = `<option value="">— choose saved month —</option>${state.months.map((m) => {
-      const lock = m.status === "approved" ? " 🔒" : "";
+      const lock = m.status === "approved" ? " (locked)" : "";
       return `<option value="${esc(m.month_key)}">${esc(m.month_key)}${lock}${m.last_processed_at ? " (" + fmtDateTime(m.last_processed_at) + ")" : ""}</option>`;
     }).join("")}`;
     // Auto-load most recent month on first startup (no month loaded yet)
@@ -1416,10 +1424,10 @@
     const rows = state.months.map((m) => {
       const isApproved = m.status === "approved";
       const chipCls  = isApproved ? "approved" : "open";
-      const chipText = isApproved ? "✓ Approved" : "● Open";
+      const chipText = isApproved ? ICO("check") + " Approved" : "Open";
       const actionBtn = isApproved
         ? `<span class="hint">Locked</span>`
-        : `<button class="btn btn-teal btn-sm" onclick="window.cashflowApp.requestApproval('${esc(m.month_key)}')">📨 Submit for Approval</button>`;
+        : `<button class="btn btn-teal btn-sm" onclick="window.cashflowApp.requestApproval('${esc(m.month_key)}')">${ICO('send')} Submit for Approval</button>`;
       return `<tr>
         <td><strong>${esc(m.month_key)}</strong></td>
         <td><span class="status-chip ${chipCls}">${chipText}</span></td>
@@ -1478,7 +1486,7 @@
       await loadMonths();
       renderAdmin();
       await loadAudit();
-      setStatus(`✓ ${monthKey} is now approved and locked.`, "ok");
+      setStatus(`${monthKey} is now approved and locked.`, "ok");
     } catch (err) {
       $("otpError").textContent = err.message;
     } finally {
@@ -1556,7 +1564,7 @@
       if (!sourceRows.length) return setStatus("No records parsed — check your source files.", "error");
       setStatus(`Parsed ${sourceRows.length.toLocaleString()} records (${apRows.length.toLocaleString()} AP + ${cashbookRows.length.toLocaleString()} cashbook). Applying rules…`, "");
       const processed = applyMappings(sourceRows, state.rules);
-      const unmapped = processed.filter((r) => !r.mapped).length;
+      const unmapped = processed.filter((r) => !r.mapped && !r.account_excluded).length;
 
       // Ask what month this is for — after parsing so the user can see the record count
       let monthKey = $("monthInput").value;
@@ -1587,7 +1595,7 @@
       await loadMonths();
       await loadAudit();
       renderAll();
-      setStatus(`✓ Saved ${monthKey} — ${processed.length.toLocaleString()} records, ${unmapped} unmapped`, "ok");
+      setStatus(`Saved ${monthKey} — ${processed.length.toLocaleString()} records, ${unmapped} unmapped`, "ok");
     } catch (err) {
       setStatus(err.message, "error");
     } finally {
@@ -1747,7 +1755,7 @@
     const savedMonth = state.months.find((m) => m.month_key === monthKey);
     const isLocked = savedMonth && savedMonth.status === "approved";
     const confirmMsg = isLocked
-      ? `⚠️ ${monthKey} is APPROVED / LOCKED.\n\nDeleting an approved month is an exceptional action. Are you absolutely sure?`
+      ? `WARNING: ${monthKey} is APPROVED / LOCKED.\n\nDeleting an approved month is an exceptional action. Are you absolutely sure?`
       : `Reset / wipe ALL data for ${monthKey}? This cannot be undone.`;
     if (!confirm(confirmMsg)) return;
 
@@ -1875,7 +1883,7 @@
       r.applies_to === rule.applies_to &&
       r.active !== false
     );
-    if (dupe && !confirm(`⚠ Duplicate detected: ${dupe.rule_code} already has the same type, match value, and scope (${dupe.rule_type}: "${dupe.match_value}" → ${dupe.category}).\n\nSave anyway?`)) return;
+    if (dupe && !confirm(`Duplicate detected: ${dupe.rule_code} already has the same type, match value, and scope (${dupe.rule_type}: "${dupe.match_value}" → ${dupe.category}).\n\nSave anyway?`)) return;
 
     const { error } = await state.supabase.from("cashflow_rules").upsert([rule], { onConflict: "rule_code" });
     if (error) return setStatus(error.message, "error");
