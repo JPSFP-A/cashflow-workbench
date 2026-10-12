@@ -472,7 +472,8 @@
   function applyMappings(sourceRows, rules) {
     return sourceRows.map((r) => {
       const row = { ...r };
-      row.account_excluded = !isAccountIncluded(row.fpc);
+      // The account filter is for the cashbook ledgers (e.g. the 12850 collections clearing account). AP lines carry an expense FPC and are never excluded by it.
+      row.account_excluded = row.data_source === "Cashbook" && !isAccountIncluded(row.fpc);
       if (row.account_excluded) {
         row.cashbook_category = "";
         row.base_case_row     = "";
@@ -528,7 +529,7 @@
 
   // Rows on an excluded account are intentionally out of the cash flow, so they are not exceptions.
   function isExcludedRow(r) {
-    return r.account_excluded === true || !isAccountIncluded(r.fpc);
+    return r.account_excluded === true || (r.data_source === "Cashbook" && !isAccountIncluded(r.fpc));
   }
 
   function excType(r) {
