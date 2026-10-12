@@ -58,6 +58,7 @@
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, multiCollapsed: new Set(), settings: {},
     pendingApprovalMonth: null,   // month key waiting for OTP entry
+    recon: [], reconSel: null, reconError: "", ruleHealth: null, previewPlan: null,
     apDetailLoaded: false,        // true when AP detail columns merged into state.records
     baseDetailFilter: null        // {base_case_row, cashbook_category} for drill-down
   };
@@ -1223,6 +1224,7 @@
     const inc = state.accountFilters.filter((a) => a.include !== false).length;
     const exc = state.accountFilters.filter((a) => a.include === false).length;
     if (el) el.textContent = `${inc} included · ${exc} excluded`;
+    const impact = accountImpact();
     table("accountsTable", [
       { label: "FPC",         key: "fpc" },
       { label: "Description", key: "description" },
@@ -1242,6 +1244,13 @@
       { label: "Tx in loaded month", key: "fpc", render: (a) => {
           const n = counts[a.fpc] || 0;
           return n ? `<button class="btn btn-ghost btn-sm" onclick="window.cashflowApp.showAccountTx('${esc(a.fpc)}')">${n.toLocaleString()} txns</button>` : '<span style="color:var(--muted)">—</span>';
+        }
+      },
+      { label: "Effect on net (loaded month)", key: "fpc", render: (a) => {
+          const o = impact.get(a.fpc);
+          if (!o) return '<span style="color:var(--muted)">—</span>';
+          if (a.include === false) return o.wouldRows ? `<span title="${o.wouldRows} rows would count">Removes ${bracket(o.wouldAdd)} from net</span>` : '<span style="color:var(--muted)">nothing would count</span>';
+          return o.inNet ? `${bracket(o.inNet)} in net` : '<span style="color:var(--muted)">not in net</span>';
         }
       },
       { label: "Notes", key: "notes", render: (a) =>
@@ -1338,6 +1347,7 @@
       if (hint) hint.textContent = "";
     }
     renderMultiMonthSelector();
+    loadRecon();
   }
 
   function renderMultiMonthSelector() {
@@ -1716,44 +1726,9 @@
       $("monthInput").value = monthKey;
       const unErr = await loadUnexplained(monthKey);
       renderAll();
+      updateStaleHint();
       if (unErr) setStatus(`Loaded ${monthKey} — ${records.length} records. The variance to the balance sheet could not be loaded: ${unErr}`, "error");
       else setStatus(`Loaded ${monthKey} — ${records.length} records`, "ok");
-    } catch (err) {
-      setStatus(err.message, "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function reapplySavedRules() {
-    if (state.busy) return;
-    const monthKey = currentMonthKey();
-    if (!monthKey) return setStatus("Choose a month first.", "error");
-    // Block if approved/locked
-    const locked = state.months.find((m) => m.month_key === monthKey && m.status === "approved");
-    if (locked) return setStatus(`${monthKey} is approved and locked. Rules cannot be reapplied.`, "error");
-    setBusy(true);
-    setStatus("Reapplying rules…", "");
-    try {
-      let rawUploads = (state.uploads.ap || state.uploads.cashbook_description || state.uploads.cashbook_account) ? state.uploads : null;
-      if (!rawUploads) {
-        const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).maybeSingle();
-        if (!month) { setStatus("Month not found.", "error"); return; }
-        const { data: uploadRows } = await state.supabase.from("cashflow_source_uploads").select("source_type,content_text").eq("month_id", month.id);
-        rawUploads = Object.fromEntries((uploadRows || []).map((u) => [u.source_type, u.content_text]));
-      }
-      setStatus("Parsing saved source files…", "");
-      const cbRows = mergeCashbooks(rawUploads.cashbook_description, rawUploads.cashbook_account);
-      const apRows2 = parseAp(rawUploads.ap || "", "invoice_payments.txt");
-      const sourceRows = [...cbRows, ...apRows2];
-      setStatus(`Applying ${state.rules.length} rules to ${sourceRows.length.toLocaleString()} records…`, "");
-      state.records = applyMappings(sourceRows, state.rules);
-      state.uploads = rawUploads;
-      await saveMonthToDb(monthKey, rawUploads, state.records);
-      await loadAudit();
-      renderAll();
-      hideReapplyPrompt();
-      setStatus(`Reapplied saved rules for ${monthKey}`, "ok");
     } catch (err) {
       setStatus(err.message, "error");
     } finally {
@@ -2463,6 +2438,7 @@
     refreshFormDropdowns();
     $("monthInput").value = new Date().toISOString().slice(0, 7);
     bindTabs();
+    bindReconUi();
     $("processBtn").addEventListener("click", processAndSaveMonth);
     $("monthSelect").addEventListener("change", async () => { const k = $("monthSelect").value; if (k) await loadMonth(k); });
     $("reapplyBtn").addEventListener("click", reapplySavedRules);
@@ -2568,7 +2544,541 @@
     });
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  // Reconciliation tools: reapply preview, reconciliation by month, rule health,
+  // stale-month flags, account exclusion impact, and the Excel reconciliation pack.
+  // ══════════════════════════════════════════════════════════════════════
+  const TIE_OK = 1000;        // US$ — treated as tied
+  const TIE_NEAR = 100000;    // US$ — worth a look, not a break
+  const RANGE_TYPES = ["cashbook_cost_range", "fpc_range", "jobno_range"];
+  const bracket = (v) => (Number(v) < 0 ? "(" + money(Math.abs(v)) + ")" : money(v));
+  const shortMoney = (v) => {
+    const n = Number(v || 0), a = Math.abs(n);
+    const s = a >= 1e6 ? (a / 1e6).toFixed(2) + "M" : a >= 1e3 ? (a / 1e3).toFixed(1) + "k" : a.toFixed(0);
+    return n < 0 ? "(" + s + ")" : s;
+  };
+
+  // ── Reconciliation by month ───────────────────────────────────────────
+  function reconDerive(r) {
+    const open = r.finmod_opening == null ? null : Number(r.finmod_opening);
+    const close = r.finmod_closing == null ? null : Number(r.finmod_closing);
+    const net = Number(r.net_flow || 0), items = Number(r.items_total || 0);
+    const movement = open != null && close != null ? close - open : null;
+    const unexplained = movement == null ? null : movement - net - items;
+    const abs = unexplained == null ? null : Math.abs(unexplained);
+    return {
+      ...r,
+      open, close, net, items, movement,
+      varianceBeforeItems: movement == null ? null : movement - net,
+      wbClose: open == null ? null : open + net + items,
+      unexplained,
+      status: abs == null ? "nodata" : abs <= TIE_OK ? "tied" : abs <= TIE_NEAR ? "near" : "gap"
+    };
+  }
+
+  async function loadRecon() {
+    if (!state.supabase) return;
+    const { data, error } = await state.supabase.rpc("cashflow_recon_months");
+    if (error) { console.error("cashflow_recon_months", error); state.recon = []; state.reconError = error.message; }
+    else { state.recon = (data || []).map(reconDerive); state.reconError = ""; }
+    markStaleMonths();
+    updateStaleHint();
+    if (activeTabName() === "reconcile") renderRecon();
+  }
+
+  function reconFor(monthKey) { return state.recon.find((r) => r.month_key === monthKey) || null; }
+
+  function markStaleMonths() {
+    const sel = $("monthSelect");
+    if (!sel) return;
+    [...sel.options].forEach((o) => {
+      if (!o.value) return;
+      if (!o.dataset.base) o.dataset.base = o.textContent;
+      const r = reconFor(o.value);
+      o.textContent = r && r.rules_changed_since > 0 ? `${o.dataset.base} · ${r.rules_changed_since} rule change${r.rules_changed_since > 1 ? "s" : ""} since` : o.dataset.base;
+    });
+  }
+
+  function updateStaleHint() {
+    const el = $("staleHint");
+    if (!el) return;
+    const r = state.loadedMonth ? reconFor(state.loadedMonth) : null;
+    if (!r || !(r.rules_changed_since > 0)) { el.style.display = "none"; return; }
+    el.style.display = "";
+    el.innerHTML = `${ICO("clock")} ${r.rules_changed_since} rule or account change${r.rules_changed_since > 1 ? "s" : ""} since ${esc(r.month_key)} was last saved. <button class="btn btn-ghost btn-sm" id="staleHintBtn">${ICO("eye")} Preview what a reapply would change</button>`;
+    $("staleHintBtn").addEventListener("click", reapplySavedRules);
+  }
+
+  const STATUS_LABEL = { tied: "Tied", near: "Within 100k", gap: "Gap", nodata: "No FinModel cash" };
+
+  function renderRecon() {
+    const host = $("reconBody");
+    if (!host) return;
+    if (state.reconError) { host.innerHTML = `<div class="recon-note bad">The reconciliation could not be loaded: ${esc(state.reconError)}</div>`; return; }
+    const rows = state.recon;
+    if (!rows.length) { host.innerHTML = `<div class="recon-note">No saved months yet.</div>`; return; }
+    const tied = rows.filter((r) => r.status === "tied").length;
+    const review = rows.filter((r) => r.status === "near" || r.status === "gap").length;
+    const stale = rows.filter((r) => r.rules_changed_since > 0).length;
+    const exclTotal = rows.reduce((s, r) => s + Number(r.excluded_amt || 0), 0);
+    const ver = (rows.find((r) => r.finmod_version) || {}).finmod_version;
+    $("reconSub").textContent = ver ? `Balance sheet cash from FinModel version ${ver}, cash and short-term deposits plus restricted cash.` : "FinModel balance sheet cash is not available to this login.";
+
+    const tile = (label, val, cls, sub) => `<div class="recon-tile ${cls || ""}"><div class="recon-tile-label">${label}</div><div class="recon-tile-val">${val}</div><div class="recon-tile-sub">${sub || ""}</div></div>`;
+    const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.unexplained || 0)));
+    const head = ["Month", "Status", "FinModel opening", "Net cash flow", "Reconciling items", "Unexplained", "FinModel ending", "Excluded accounts", "Rule changes since", ""];
+    const body = rows.slice().reverse().map((r) => {
+      const bar = r.unexplained == null ? "" : `<span class="recon-bar ${r.unexplained < 0 ? "neg" : "pos"}" style="width:${Math.max(2, Math.round(Math.abs(r.unexplained) / maxAbs * 70))}px"></span>`;
+      return `<tr data-month="${esc(r.month_key)}" class="${state.reconSel === r.month_key ? "sel" : ""}">
+        <td><strong>${esc(r.month_key)}</strong></td>
+        <td><span class="recon-chip ${r.status}">${STATUS_LABEL[r.status]}</span></td>
+        <td class="num">${r.open == null ? "—" : money(r.open)}</td>
+        <td class="num">${bracket(r.net)}</td>
+        <td class="num">${r.items ? bracket(r.items) : "—"}</td>
+        <td class="num">${r.unexplained == null ? "—" : `${bar}${bracket(r.unexplained)}`}</td>
+        <td class="num">${r.close == null ? "—" : money(r.close)}</td>
+        <td class="num">${r.excluded_rows ? `${Number(r.excluded_rows).toLocaleString()} rows · ${bracket(r.excluded_amt)}` : "—"}</td>
+        <td class="num">${r.rules_changed_since > 0 ? `<span class="recon-chip near">${r.rules_changed_since}</span>` : "—"}</td>
+        <td><button class="btn btn-ghost btn-sm" data-open="${esc(r.month_key)}">Open</button></td>
+      </tr>`;
+    }).join("");
+    host.innerHTML = `
+      <div class="recon-tiles">
+        ${tile("Months tied", `${tied} of ${rows.length}`, tied === rows.length ? "good" : "", `within US$${TIE_OK.toLocaleString()} of the balance sheet`)}
+        ${tile("Months to review", review, review ? "warn" : "good", "unexplained above US$1,000")}
+        ${tile("Months with newer rules", stale, stale ? "warn" : "good", "preview a reapply to see the effect")}
+        ${tile("Removed by account filters", bracket(exclTotal), "", "net effect across all months")}
+      </div>
+      <div class="recon-grid">
+        <div class="tablebox" style="max-height:none"><table id="reconTable"><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>
+        <div class="recon-detail" id="reconDetail"></div>
+      </div>`;
+    renderReconDetail();
+  }
+
+  function renderReconDetail() {
+    const host = $("reconDetail");
+    if (!host) return;
+    const r = reconFor(state.reconSel || (state.recon[state.recon.length - 1] || {}).month_key);
+    if (!r) { host.innerHTML = ""; return; }
+    state.reconSel = r.month_key;
+    document.querySelectorAll("#reconTable tbody tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.month === r.month_key));
+    if (r.open == null) {
+      host.innerHTML = `<h4>${esc(r.month_key)}</h4><p class="hint">FinModel has no actual balance sheet cash for this month, so there is nothing to reconcile to.</p>`;
+      return;
+    }
+    const steps = [
+      { label: "FinModel opening", v: r.open, kind: "total" },
+      { label: "Net cash flow", v: r.net, kind: "flow" },
+      { label: "Reconciling items", v: r.items, kind: "flow" },
+      { label: "Unexplained", v: r.unexplained, kind: "gap" },
+      { label: "FinModel ending", v: r.close, kind: "total" }
+    ];
+    const facts = [
+      ["Receipts", bracket(r.receipts)],
+      ["Disbursements", bracket(r.disbursements)],
+      ["Financing", bracket(r.financing)],
+      ["Net cash flow (Workbench)", bracket(r.net)],
+      ["Not in net (bank legs, transfers)", bracket(r.other_not_in_net)],
+      ["Excluded by account filters", r.excluded_rows ? `${Number(r.excluded_rows).toLocaleString()} rows, ${bracket(r.excluded_amt)}` : "none"],
+      ["Unmapped rows", String(r.unmapped)],
+      ["Last saved", r.last_processed_at ? fmtDateTime(r.last_processed_at) : "—"]
+    ];
+    host.innerHTML = `
+      <div class="recon-detail-head"><h4>${esc(r.month_key)} bridge</h4><span class="recon-chip ${r.status}">${STATUS_LABEL[r.status]}</span></div>
+      ${waterfallSvg(steps)}
+      <table class="recon-facts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${esc(v)}</td></tr>`).join("")}</table>
+      <div class="recon-actions">
+        <button class="btn btn-ghost btn-sm" data-open="${esc(r.month_key)}">${ICO("folder")} Open month</button>
+        <button class="btn btn-ghost btn-sm" data-preview="${esc(r.month_key)}">${ICO("eye")} Preview reapply</button>
+      </div>`;
+  }
+
+  // Waterfall as inline SVG. The axis does not start at zero: opening and ending cash are tens of
+  // millions while the flows are a few millions, so a zero baseline would hide them.
+  function waterfallSvg(steps) {
+    const W = 560, H = 270, L = 12, R = 12, T = 22, B = 56;
+    const levels = [];
+    let run = 0;
+    steps.forEach((s, i) => {
+      if (s.kind === "total") { run = s.v; levels.push([0, run]); }
+      else { const from = run; run += s.v; levels.push([from, run]); }
+    });
+    const flat = levels.flatMap((l, i) => (steps[i].kind === "total" ? [l[1]] : l));
+    const lo0 = Math.min(...flat), hi0 = Math.max(...flat), pad = Math.max((hi0 - lo0) * 0.12, 1);
+    const lo = lo0 - pad, hi = hi0 + pad;
+    const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
+    const bw = (W - L - R) / steps.length;
+    const bars = steps.map((s, i) => {
+      const x = L + i * bw + bw * 0.16, w = bw * 0.68;
+      const [a, b] = levels[i];
+      const top = s.kind === "total" ? y(b) : y(Math.max(a, b));
+      const bot = s.kind === "total" ? y(lo + pad * 0.4) : y(Math.min(a, b));
+      const h = Math.max(2, bot - top);
+      const cls = s.kind === "total" ? "wf-total" : s.kind === "gap" ? "wf-gap" : s.v >= 0 ? "wf-up" : "wf-down";
+      const link = i < steps.length - 1 ? `<line class="wf-link" x1="${x + w}" x2="${x + bw + bw * 0.16 - (bw * 0.16)}" y1="${y(b)}" y2="${y(b)}"/>` : "";
+      return `${link}<rect class="${cls}" x="${x}" y="${top}" width="${w}" height="${h}" rx="3"/>
+        <text class="wf-val" x="${x + w / 2}" y="${Math.max(12, top - 5)}" text-anchor="middle">${esc(shortMoney(s.v))}</text>
+        <text class="wf-lab" x="${x + w / 2}" y="${H - B + 16}" text-anchor="middle">${esc(s.label.split(" ")[0])}</text>
+        <text class="wf-lab" x="${x + w / 2}" y="${H - B + 29}" text-anchor="middle">${esc(s.label.split(" ").slice(1).join(" "))}</text>`;
+    }).join("");
+    return `<svg class="recon-wf" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cash bridge from FinModel opening to FinModel ending">${bars}</svg><div class="hint" style="margin:-4px 0 8px">Axis starts at ${esc(shortMoney(lo))}, not zero.</div>`;
+  }
+
+  // ── Reapply preview ───────────────────────────────────────────────────
+  async function buildReapplyPlan(monthKey) {
+    let raw = state.loadedMonth === monthKey && (state.uploads.ap || state.uploads.cashbook_description || state.uploads.cashbook_account) ? state.uploads : null;
+    if (!raw) {
+      const { data: month } = await state.supabase.from("cashflow_months").select("id").eq("month_key", monthKey).maybeSingle();
+      if (!month) throw new Error("Month not found.");
+      const { data: uploadRows } = await state.supabase.from("cashflow_source_uploads").select("source_type,content_text").eq("month_id", month.id);
+      raw = Object.fromEntries((uploadRows || []).map((u) => [u.source_type, u.content_text]));
+    }
+    const sourceRows = [...mergeCashbooks(raw.cashbook_description, raw.cashbook_account), ...parseAp(raw.ap || "", "invoice_payments.txt")];
+    const next = applyMappings(sourceRows, state.rules);
+    return { monthKey, raw, next, diff: diffRecords(state.records, next) };
+  }
+
+  // A saved row only counts as excluded when it carries no mapping. Rows saved before the account was
+  // filtered still have a base row, so a preview shows them leaving the net.
+  const wasExcluded = (r) => isExcludedRow(r) && !r.base_case_row;
+
+  function netAndExceptions(records, isOut) {
+    let net = 0, unmapped = 0, excluded = 0, excludedAmt = 0;
+    records.forEach((r) => {
+      if (isOut(r)) { excluded += 1; excludedAmt += Number(r.signed_amount || 0); return; }
+      if (!r.mapped) unmapped += 1;
+      if (r.base_case_row && baseRowInNet(r.base_case_row)) net += Number(r.signed_amount || 0);
+    });
+    return { net, unmapped, excluded, excludedAmt };
+  }
+
+  function diffRecords(before, after) {
+    const old = new Map(before.map((r) => [r.record_key, r]));
+    const moves = new Map();
+    let changed = 0, ruleOnly = 0, added = 0, matched = 0;
+    after.forEach((n) => {
+      const o = old.get(n.record_key);
+      if (!o) { added += 1; return; }
+      matched += 1;
+      const ob = o.base_case_row || "", nb = n.base_case_row || "";
+      const oe = wasExcluded(o), ne = isExcludedRow(n);
+      const oldLabel = oe ? "(excluded account)" : ob || "(unmapped)";
+      const newLabel = ne ? "(excluded account)" : nb || "(unmapped)";
+      if (oldLabel !== newLabel) {
+        changed += 1;
+        const k = oldLabel + "\u0001" + newLabel;
+        const m = moves.get(k) || { from: oldLabel, to: newLabel, rows: 0, amount: 0 };
+        m.rows += 1; m.amount += Number(n.signed_amount || 0);
+        moves.set(k, m);
+      } else if ((o.mapping_rule || "") !== (n.mapping_rule || "")) ruleOnly += 1;
+    });
+    const removed = before.length - matched;
+    return {
+      before: netAndExceptions(before, wasExcluded), after: netAndExceptions(after, isExcludedRow),
+      moves: [...moves.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+      changed, ruleOnly, added, removed
+    };
+  }
+
+  function openPreview(plan) {
+    const d = plan.diff;
+    const dNet = d.after.net - d.before.net;
+    const tile = (label, val, sub, cls) => `<div class="recon-tile ${cls || ""}"><div class="recon-tile-label">${label}</div><div class="recon-tile-val">${val}</div><div class="recon-tile-sub">${sub}</div></div>`;
+    const moves = d.moves.slice(0, 25).map((m) => `<tr><td>${esc(m.from)}</td><td>${esc(m.to)}</td><td class="num">${m.rows.toLocaleString()}</td><td class="num">${bracket(m.amount)}</td></tr>`).join("");
+    const nothing = !d.changed && !d.ruleOnly && !d.added && !d.removed;
+    $("previewBody").innerHTML = `
+      <div class="recon-tiles">
+        ${tile("Rows that move", d.changed.toLocaleString(), `${d.ruleOnly.toLocaleString()} more change rule only`, d.changed ? "warn" : "good")}
+        ${tile("Net cash flow", bracket(dNet), `${bracket(d.before.net)} to ${bracket(d.after.net)}`, Math.abs(dNet) > TIE_OK ? "warn" : "good")}
+        ${tile("Unmapped", `${d.before.unmapped} to ${d.after.unmapped}`, "excluding filtered accounts", d.after.unmapped ? "warn" : "good")}
+        ${tile("Excluded rows", `${d.before.excluded.toLocaleString()} to ${d.after.excluded.toLocaleString()}`, `${bracket(d.after.excludedAmt - d.before.excludedAmt)} removed from the net`, d.after.excluded !== d.before.excluded ? "warn" : "good")}
+      </div>
+      ${d.added || d.removed ? `<div class="recon-note">${d.added} new and ${d.removed} missing rows compared with the saved month: the source files no longer parse to the same rows.</div>` : ""}
+      ${nothing ? `<div class="recon-note good">A reapply would change nothing for ${esc(plan.monthKey)}.</div>` : `
+      <div class="tablebox" style="max-height:38vh"><table><thead><tr><th>From</th><th>To</th><th class="num">Rows</th><th class="num">US$</th></tr></thead><tbody>${moves || `<tr><td colspan="4" class="hint">Only the rule that applies changes, not the base row.</td></tr>`}</tbody></table></div>
+      ${d.moves.length > 25 ? `<div class="hint">Showing the 25 largest of ${d.moves.length} moves. The CSV has every row.</div>` : ""}`}`;
+    $("previewTitle").textContent = `Reapply preview: ${plan.monthKey}`;
+    $("previewApplyBtn").disabled = false;
+    $("previewApplyBtn").innerHTML = `${ICO("check")} ${nothing ? "Save anyway" : "Apply reapply"}`;
+    $("previewModal").classList.add("open");
+  }
+  function closePreview() { $("previewModal").classList.remove("open"); }
+
+  function downloadPreviewCsv() {
+    const plan = state.previewPlan;
+    if (!plan) return;
+    const old = new Map(state.records.map((r) => [r.record_key, r]));
+    const rows = [["record_key", "source", "fpc", "description", "amount", "from_base_row", "to_base_row", "from_rule", "to_rule"]];
+    plan.next.forEach((n) => {
+      const o = old.get(n.record_key);
+      if (!o) return;
+      const ob = wasExcluded(o) ? "(excluded account)" : o.base_case_row || "(unmapped)";
+      const nb = isExcludedRow(n) ? "(excluded account)" : n.base_case_row || "(unmapped)";
+      if (ob !== nb || (o.mapping_rule || "") !== (n.mapping_rule || "")) rows.push([n.record_key, n.data_source, n.fpc, n.description, n.signed_amount, ob, nb, o.mapping_rule || "", n.mapping_rule || ""]);
+    });
+    download(`reapply_preview_${plan.monthKey}.csv`, toCsv(rows), "text/csv");
+  }
+
+  async function reapplySavedRules() {
+    if (state.busy) return;
+    const monthKey = currentMonthKey();
+    if (!monthKey) return setStatus("Choose a month first.", "error");
+    if (state.months.find((m) => m.month_key === monthKey && m.status === "approved")) return setStatus(`${monthKey} is approved and locked. Rules cannot be reapplied.`, "error");
+    setBusy(true);
+    setStatus("Working out what a reapply would change…", "");
+    try {
+      const plan = await buildReapplyPlan(monthKey);
+      state.previewPlan = plan;
+      setStatus("", "");
+      openPreview(plan);
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commitReapply() {
+    const plan = state.previewPlan;
+    if (!plan || state.busy) return;
+    closePreview();
+    setBusy(true);
+    setStatus("Saving the reapplied month…", "");
+    try {
+      state.records = plan.next;
+      state.uploads = plan.raw;
+      await saveMonthToDb(plan.monthKey, plan.raw, plan.next);
+      await loadAudit();
+      renderAll();
+      hideReapplyPrompt();
+      state.previewPlan = null;
+      setStatus(`Reapplied saved rules for ${plan.monthKey}`, "ok");
+      loadRecon();
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── Rule health ───────────────────────────────────────────────────────
+  function rangeValueBroken(type, value) {
+    return RANGE_TYPES.includes(type) && value && String(value).indexOf("-", 1) < 1;
+  }
+  function ruleDeadReason(rule) {
+    const bad = [[rule.rule_type, rule.match_value], [rule.cond2_type, rule.cond2_value], [rule.cond3_type, rule.cond3_value]].find(([t, v]) => rangeValueBroken(t, v));
+    return bad ? `${bad[0]} value "${bad[1]}" has no hyphen, so the range check always fails (use "${bad[1]}-${bad[1]}")` : "";
+  }
+
+  async function analyseRuleHealth() {
+    const host = $("ruleHealthBody");
+    if (!host) return;
+    if (!state.records.length) { host.innerHTML = `<div class="recon-note">Load a month first. The check runs the active rules against that month's rows.</div>`; return; }
+    host.innerHTML = `<div class="recon-note">Checking ${state.rules.length} rules against ${state.records.length.toLocaleString()} rows…</div>`;
+    await new Promise((r) => setTimeout(r, 30));
+    const rules = state.rules.filter((r) => r.active !== false);
+    const stat = new Map(rules.map((r) => [r.rule_code, { rule: r, matches: 0, wins: 0, beaten: new Map() }]));
+    const rows = state.records.filter((r) => !isExcludedRow(r));
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      let winner = null;
+      for (const rule of rules) {
+        if (!ruleApplies(rule, row)) continue;
+        const s = stat.get(rule.rule_code);
+        s.matches += 1;
+        if (!winner) { winner = rule; s.wins += 1; } else s.beaten.set(winner.rule_code, (s.beaten.get(winner.rule_code) || 0) + 1);
+      }
+      if (i % 1500 === 1499) await new Promise((r) => setTimeout(r, 0));
+    }
+    const all = [...stat.values()];
+    const dead = all.map((s) => ({ s, why: ruleDeadReason(s.rule) })).filter((x) => x.why);
+    const shadowed = all.filter((s) => s.matches > 0 && s.wins === 0 && !ruleDeadReason(s.rule));
+    const unused = all.filter((s) => s.matches === 0 && !ruleDeadReason(s.rule));
+    const seen = new Map(), dupes = [];
+    rules.forEach((r) => {
+      const k = [r.applies_to, r.rule_type, r.match_value, r.cond2_type, r.cond2_value, r.cond3_type, r.cond3_value].map(norm).join("|");
+      if (seen.has(k)) dupes.push([seen.get(k), r.rule_code]); else seen.set(k, r.rule_code);
+    });
+    state.ruleHealth = { month: state.loadedMonth, dead, shadowed, unused, dupes, ruleCount: rules.length, rowCount: rows.length };
+    const topBeater = (s) => { const e = [...s.beaten.entries()].sort((a, b) => b[1] - a[1])[0]; return e ? `${e[0]} (${e[1].toLocaleString()} rows)` : "—"; };
+    const block = (title, cls, count, inner, note) => `<div class="rh-block"><div class="rh-head"><span class="recon-chip ${cls}">${count}</span> ${title}</div>${note ? `<div class="hint" style="margin:0 0 6px">${note}</div>` : ""}${inner}</div>`;
+    const tbl = (heads, trs) => trs.length ? `<div class="tablebox" style="max-height:30vh"><table><thead><tr>${heads.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${trs.join("")}</tbody></table></div>` : `<div class="hint">None.</div>`;
+    host.innerHTML = `<div class="hint" style="margin-bottom:8px">${rules.length} active rules against ${rows.length.toLocaleString()} rows of ${esc(state.loadedMonth)}. Rows on excluded accounts are skipped.</div>` +
+      block("Rules that can never match", dead.length ? "gap" : "tied", dead.length, tbl(["Rule", "Why"], dead.map((x) => `<tr><td>${esc(x.s.rule.rule_code)}</td><td>${esc(x.why)}</td></tr>`))) +
+      block("Rules that are always beaten", shadowed.length ? "near" : "tied", shadowed.length, tbl(["Rule", "Matches", "Beaten by"], shadowed.map((s) => `<tr><td>${esc(s.rule.rule_code)}</td><td class="num">${s.matches.toLocaleString()}</td><td>${esc(topBeater(s))}</td></tr>`)), "These match rows but an earlier rule always takes them first, so they change nothing in this month.") +
+      block("Rules with the same condition as another rule", dupes.length ? "near" : "tied", dupes.length, tbl(["Rule", "Same condition as"], dupes.map(([a, b]) => `<tr><td>${esc(b)}</td><td>${esc(a)}</td></tr>`)), "Only the earlier rule ever applies, even when the two give different results.") +
+      block("Rules with no matches this month", "nodata", unused.length, tbl(["Rule", "Type", "Match", "Scope"], unused.map((s) => `<tr><td>${esc(s.rule.rule_code)}</td><td>${esc(s.rule.rule_type)}</td><td>${esc(s.rule.match_value)}</td><td>${esc(s.rule.applies_to)}</td></tr>`)), "Not a fault: they may apply to other months.");
+  }
+
+  // ── Account exclusion impact ──────────────────────────────────────────
+  function accountImpact() {
+    const out = new Map();
+    state.records.forEach((r) => {
+      if (!r.fpc) return;
+      const o = out.get(r.fpc) || { fpc: r.fpc, rows: 0, inNet: 0, wouldAdd: 0, wouldRows: 0 };
+      o.rows += 1;
+      const excluded = r.data_source === "Cashbook" && !isAccountIncluded(r.fpc);
+      if (excluded) {
+        const rule = state.rules.find((c) => c.active !== false && ruleApplies(c, r));
+        if (rule && rule.base_case_row && baseRowInNet(rule.base_case_row)) { o.wouldAdd += Number(r.signed_amount || 0); o.wouldRows += 1; }
+      } else if (r.base_case_row && baseRowInNet(r.base_case_row)) o.inNet += Number(r.signed_amount || 0);
+      out.set(r.fpc, o);
+    });
+    return out;
+  }
+
+  // ── Excel reconciliation pack ─────────────────────────────────────────
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = resolve; s.onerror = () => reject(new Error("Could not load the Excel library. Check your connection and try again."));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function downloadReconPack() {
+    if (!state.recon.length) return setStatus("Nothing to export yet.", "error");
+    setStatus("Building the reconciliation pack…", "");
+    try {
+      if (!window.ExcelJS) await loadScript("https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js");
+      const wb = new window.ExcelJS.Workbook();
+      wb.creator = userName(); wb.created = new Date();
+      const NAVY = "FF1A2540", PALE = "FFEDF3F8";
+      const money0 = '#,##0;(#,##0);"-"';
+      const hdr = (row) => { row.font = { bold: true, color: { argb: "FFFFFFFF" } }; row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } }; row.alignment = { vertical: "middle", wrapText: true }; row.height = 30; };
+      const title = (ws, text, sub) => { ws.getCell("A1").value = text; ws.getCell("A1").font = { bold: true, size: 14, color: { argb: NAVY } }; ws.getCell("A2").value = sub; ws.getCell("A2").font = { color: { argb: "FF64748B" } }; };
+      const ver = (state.recon.find((r) => r.finmod_version) || {}).finmod_version || "not available";
+
+      // Summary: every month, bridge by formula
+      const s1 = wb.addWorksheet("Summary", { views: [{ state: "frozen", xSplit: 1, ySplit: 4 }] });
+      title(s1, "Cash Workbench reconciliation to the FinModel balance sheet", `FinModel version ${ver} · generated ${new Date().toLocaleString()} · US$`);
+      const h1 = ["Month", "FinModel opening", "Receipts", "Disbursements", "Financing", "Net cash flow", "Reconciling items", "Workbench ending", "FinModel ending", "Unexplained", "Status", "Not in net", "Excluded rows", "Excluded US$", "Rule changes since"];
+      hdr(s1.getRow(4)); h1.forEach((h, i) => { s1.getRow(4).getCell(i + 1).value = h; });
+      state.recon.forEach((r, i) => {
+        const n = 5 + i, row = s1.getRow(n);
+        row.getCell(1).value = r.month_key;
+        row.getCell(2).value = r.open;
+        row.getCell(3).value = Number(r.receipts); row.getCell(4).value = Number(r.disbursements); row.getCell(5).value = Number(r.financing);
+        row.getCell(6).value = { formula: `SUM(C${n}:E${n})`, result: r.net };
+        row.getCell(7).value = r.items;
+        row.getCell(8).value = r.open == null ? null : { formula: `B${n}+F${n}+G${n}`, result: r.wbClose };
+        row.getCell(9).value = r.close;
+        row.getCell(10).value = r.close == null || r.open == null ? null : { formula: `I${n}-H${n}`, result: r.unexplained };
+        row.getCell(11).value = r.close == null || r.open == null ? "No FinModel cash" : { formula: `IF(ABS(J${n})<=${TIE_OK},"Tied",IF(ABS(J${n})<=${TIE_NEAR},"Within 100k","Gap"))`, result: STATUS_LABEL[r.status] };
+        row.getCell(12).value = Number(r.other_not_in_net); row.getCell(13).value = Number(r.excluded_rows); row.getCell(14).value = Number(r.excluded_amt); row.getCell(15).value = Number(r.rules_changed_since);
+        for (let c = 2; c <= 14; c += 1) if (c !== 11 && c !== 13) row.getCell(c).numFmt = money0;
+        const fill = r.status === "tied" ? "FFDCFCE7" : r.status === "near" ? "FFFEF3C7" : r.status === "gap" ? "FFFEE2E2" : "FFF1F5F9";
+        row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+        row.getCell(10).font = { bold: true };
+      });
+      s1.columns = [{ width: 11 }, ...Array(14).fill({ width: 16 })];
+      s1.autoFilter = { from: "A4", to: `O${4 + state.recon.length}` };
+      const last = 4 + state.recon.length;
+      const tr = s1.getRow(last + 1);
+      tr.getCell(1).value = "Total";
+      ["C", "D", "E", "F", "G", "L", "N"].forEach((col) => { tr.getCell(col).value = { formula: `SUM(${col}5:${col}${last})` }; tr.getCell(col).numFmt = money0; });
+      tr.font = { bold: true }; tr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALE } };
+
+      // Bridge for the selected month
+      const sel = reconFor(state.reconSel) || state.recon[state.recon.length - 1];
+      if (sel && sel.open != null) {
+        const s2 = wb.addWorksheet("Bridge");
+        title(s2, `Cash bridge, ${sel.month_key}`, "Opening cash to ending cash, one step per line");
+        hdr(s2.getRow(4)); ["Step", "US$", "Running cash"].forEach((h, i) => { s2.getRow(4).getCell(i + 1).value = h; });
+        const steps = [["FinModel opening cash", sel.open], ["Receipts", Number(sel.receipts)], ["Disbursements", Number(sel.disbursements)], ["Financing", Number(sel.financing)], ["Reconciling items", sel.items], ["Unexplained", sel.unexplained]];
+        steps.forEach(([k, v], i) => {
+          const n = 5 + i, row = s2.getRow(n);
+          row.getCell(1).value = k; row.getCell(2).value = v;
+          row.getCell(3).value = i === 0 ? { formula: "B5" } : { formula: `C${n - 1}+B${n}` };
+          row.getCell(2).numFmt = money0; row.getCell(3).numFmt = money0;
+        });
+        const e = 5 + steps.length;
+        s2.getCell(`A${e}`).value = "FinModel ending cash"; s2.getCell(`B${e}`).value = sel.close; s2.getCell(`B${e}`).numFmt = money0;
+        s2.getCell(`A${e + 1}`).value = "Check: running cash minus FinModel ending"; s2.getCell(`B${e + 1}`).value = { formula: `C${e - 1}-B${e}` }; s2.getCell(`B${e + 1}`).numFmt = money0;
+        s2.getRow(e).font = { bold: true }; s2.columns = [{ width: 44 }, { width: 18 }, { width: 18 }];
+      }
+
+      // Loaded month: base case, excluded accounts, rule health
+      if (state.loadedMonth && state.records.length) {
+        const s3 = wb.addWorksheet("Base case");
+        title(s3, `Base case, ${state.loadedMonth}`, "Net counts Receipts, Disbursements and Financing only; rows with no section are listed below the net");
+        hdr(s3.getRow(4)); ["Section", "Base case row", "US$", "Lines"].forEach((h, i) => { s3.getRow(4).getCell(i + 1).value = h; });
+        const by = new Map();
+        state.records.filter((r) => r.base_case_row).forEach((r) => { const o = by.get(r.base_case_row) || { amt: 0, n: 0 }; o.amt += Number(r.signed_amount || 0); o.n += 1; by.set(r.base_case_row, o); });
+        let n = 5; const netRows = [];
+        const secOf = (b) => (state.sections.find((s) => s.base_case_row === b && s.active !== false) || {}).section || "(Other)";
+        [...by.entries()].sort((a, b) => (secOf(a[0]) === "(Other)") - (secOf(b[0]) === "(Other)") || secOf(a[0]).localeCompare(secOf(b[0])) || Math.abs(b[1].amt) - Math.abs(a[1].amt)).forEach(([b, o]) => {
+          const sec = secOf(b);
+          s3.getRow(n).values = [sec, b, o.amt, o.n]; s3.getRow(n).getCell(3).numFmt = money0;
+          if (sec !== "(Other)") netRows.push(n);
+          n += 1;
+        });
+        n += 1;
+        s3.getRow(n).values = ["", "Net cash flow", { formula: netRows.length ? `SUM(${netRows.map((x) => `C${x}`).join(",")})` : "0" }, ""];
+        s3.getRow(n).font = { bold: true }; s3.getRow(n).getCell(3).numFmt = money0; s3.getRow(n).fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALE } };
+        s3.columns = [{ width: 16 }, { width: 34 }, { width: 18 }, { width: 10 }];
+
+        const s4 = wb.addWorksheet("Account filters");
+        title(s4, `Account filters, ${state.loadedMonth}`, "What each account contributes to the net, or would contribute if it were included");
+        hdr(s4.getRow(4)); ["FPC", "Description", "Status", "Rows", "In net now (US$)", "Would add if included (US$)", "Rows that would count"].forEach((h, i) => { s4.getRow(4).getCell(i + 1).value = h; });
+        const imp = accountImpact();
+        state.accountFilters.filter((a) => imp.has(a.fpc)).forEach((a, i) => {
+          const o = imp.get(a.fpc), row = s4.getRow(5 + i);
+          row.values = [a.fpc, a.description || "", a.include === false ? "Excluded" : "Included", o.rows, o.inNet, o.wouldAdd, o.wouldRows];
+          [5, 6].forEach((c) => { row.getCell(c).numFmt = money0; });
+        });
+        s4.columns = [{ width: 10 }, { width: 38 }, { width: 11 }, { width: 9 }, { width: 18 }, { width: 24 }, { width: 20 }];
+      }
+      if (state.ruleHealth) {
+        const h = state.ruleHealth, s5 = wb.addWorksheet("Rule health");
+        title(s5, `Rule health, ${h.month}`, `${h.ruleCount} active rules checked against ${h.rowCount.toLocaleString()} rows`);
+        hdr(s5.getRow(4)); ["Finding", "Rule", "Detail"].forEach((t, i) => { s5.getRow(4).getCell(i + 1).value = t; });
+        let n = 5;
+        h.dead.forEach((x) => { s5.getRow(n++).values = ["Can never match", x.s.rule.rule_code, x.why]; });
+        h.shadowed.forEach((s) => { s5.getRow(n++).values = ["Always beaten", s.rule.rule_code, `${s.matches} matches, none first`]; });
+        h.dupes.forEach(([a, b]) => { s5.getRow(n++).values = ["Duplicate", b, `Same as ${a}`]; });
+        s5.columns = [{ width: 18 }, { width: 14 }, { width: 80 }];
+      }
+      const s6 = wb.addWorksheet("Notes");
+      [["Definitions"], ["Net cash flow", "Sum of Receipts, Disbursements and Financing rows. Rows with no section (bank legs of AP payments, transfers, bank charges) are shown separately and are not in the net."],
+        ["Reconciling items", "Items the bank shows that the cash flow lines do not: AP payments in the register the bank has not cleared, and other bank movements. Set by the FinModel month-end close."],
+        ["Unexplained", "FinModel ending cash minus Workbench ending cash (opening + net cash flow + reconciling items)."],
+        ["Tied", `Unexplained within US$${TIE_OK.toLocaleString()}. Within 100k is up to US$${TIE_NEAR.toLocaleString()}. Above that is a Gap.`],
+        ["Source", `FinModel version ${ver}: cash and short-term deposits plus restricted cash, actual months only.`]]
+        .forEach((r, i) => { s6.getRow(2 + i).values = r; if (i === 0) s6.getRow(2).font = { bold: true, size: 13 }; else s6.getRow(2 + i).getCell(1).font = { bold: true }; });
+      s6.columns = [{ width: 22 }, { width: 120 }];
+
+      const buf = await wb.xlsx.writeBuffer();
+      download(`cash_reconciliation_pack_${new Date().toISOString().slice(0, 10)}.xlsx`, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      setStatus("Reconciliation pack downloaded.", "ok");
+      auditLog("export_recon_pack", state.loadedMonth || null, null, `${state.recon.length} months`);
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  }
+
+  function bindReconUi() {
+    if ($("reconBody")) $("reconBody").addEventListener("click", async (e) => {
+      const openBtn = e.target.closest("[data-open]");
+      const prevBtn = e.target.closest("[data-preview]");
+      const tr = e.target.closest("#reconTable tbody tr");
+      if (openBtn) { $("monthSelect").value = openBtn.dataset.open; await loadMonth(openBtn.dataset.open); document.querySelector('.tab-btn[data-tab="base"]').click(); return; }
+      if (prevBtn) { $("monthSelect").value = prevBtn.dataset.preview; await loadMonth(prevBtn.dataset.preview); await reapplySavedRules(); return; }
+      if (tr) { state.reconSel = tr.dataset.month; renderReconDetail(); }
+    });
+    if ($("reconRefreshBtn")) $("reconRefreshBtn").addEventListener("click", loadRecon);
+    if ($("reconPackBtn")) $("reconPackBtn").addEventListener("click", downloadReconPack);
+    if ($("ruleHealthBtn")) $("ruleHealthBtn").addEventListener("click", analyseRuleHealth);
+    if ($("previewApplyBtn")) $("previewApplyBtn").addEventListener("click", commitReapply);
+    if ($("previewCancelBtn")) $("previewCancelBtn").addEventListener("click", closePreview);
+    if ($("previewCsvBtn")) $("previewCsvBtn").addEventListener("click", downloadPreviewCsv);
+    if ($("previewModal")) $("previewModal").addEventListener("click", (e) => { if (e.target === $("previewModal")) closePreview(); });
+    document.querySelectorAll('.tab-btn[data-tab="reconcile"]').forEach((btn) => btn.addEventListener("click", () => { loadRecon().then(renderRecon); }));
+  }
+
+
   bindUi();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, toggleAccount, saveAccountNote, showAccountTx, closeAccountTx, init };
+  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, toggleAccount, saveAccountNote, showAccountTx, closeAccountTx, init, loadRecon, renderRecon };
 })();

@@ -401,6 +401,36 @@
       box-shadow: 0 20px 60px rgba(15,39,68,.30);
       animation: slideUp .25s cubic-bezier(.22,.8,.36,1);
     }
+    .modal-card.wide { max-width: 860px; max-height: 90vh; overflow: auto; }
+    .stale-hint { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--gold); background: #FFF8E6; border: 1px solid #F3DDA0; border-radius: 8px; padding: 7px 12px; margin: -4px 0 12px; }
+    .recon-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .recon-tile { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; border-left: 3px solid var(--line); }
+    .recon-tile.good { border-left-color: var(--teal); } .recon-tile.warn { border-left-color: var(--gold); }
+    .recon-tile-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .recon-tile-val { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .recon-tile-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .recon-note { font-size: 13px; color: var(--muted); padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; margin-bottom: 10px; }
+    .recon-note.good { color: var(--teal); border-color: var(--teal); } .recon-note.bad { color: var(--red); border-color: var(--red); }
+    .recon-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
+    @media (max-width: 1100px) { .recon-grid { grid-template-columns: 1fr; } }
+    .recon-chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .recon-chip.tied { background: #DCFCE7; color: #166534; } .recon-chip.near { background: #FEF3C7; color: #92400E; }
+    .recon-chip.gap { background: #FEE2E2; color: #991B1B; } .recon-chip.nodata { background: #F1F5F9; color: #475569; }
+    #reconTable tbody tr { cursor: pointer; } #reconTable tbody tr.sel { background: #E8F0FA; }
+    .recon-bar { display: inline-block; height: 8px; border-radius: 4px; margin-right: 8px; vertical-align: middle; }
+    .recon-bar.pos { background: #16A34A; } .recon-bar.neg { background: #DC2626; }
+    .recon-detail { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+    .recon-detail h4 { margin: 0; font-size: 15px; color: var(--navy); }
+    .recon-detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .recon-wf { width: 100%; height: auto; display: block; }
+    .recon-wf .wf-total { fill: #1A2540; } .recon-wf .wf-up { fill: #16A34A; } .recon-wf .wf-down { fill: #DC2626; } .recon-wf .wf-gap { fill: #D97706; }
+    .recon-wf .wf-link { stroke: #94A3B8; stroke-dasharray: 3 3; }
+    .recon-wf .wf-val { font-size: 11px; font-weight: 700; fill: var(--navy); font-variant-numeric: tabular-nums; }
+    .recon-wf .wf-lab { font-size: 10.5px; fill: var(--muted); }
+    .recon-facts { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 6px 0 10px; }
+    .recon-facts td { padding: 4px 0; border-bottom: 1px solid var(--line); } .recon-facts td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .recon-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .rh-block { margin-bottom: 14px; } .rh-head { font-weight: 700; color: var(--navy); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
     .modal-card h3 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 0 0 8px; }
     .modal-card p  { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
     #otpInput {
@@ -522,7 +552,7 @@
   </style>
 </head>
 <body>
-<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol><symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13"/></symbol><symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol><symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></symbol><symbol id="i-landmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2 4 7h16z"/></symbol><symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></symbol><symbol id="i-bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol><symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol><symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol><symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol><symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol><symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol><symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol><symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol><symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol><symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol><symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol><symbol id="i-unlink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-.12-7.07 5 5 0 0 0-6.95 0l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 .12 7.07 5 5 0 0 0 6.95 0l1.71-1.71"/><path d="M8 2v3M2 8h3M16 19v3M19 16h3"/></symbol><symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol><symbol id="i-arrow-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></symbol><symbol id="i-arrow-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m18 9-6-6-6 6"/><path d="M12 3v14"/><path d="M5 21h14"/></symbol></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol><symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13"/></symbol><symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol><symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></symbol><symbol id="i-landmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2 4 7h16z"/></symbol><symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></symbol><symbol id="i-bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol><symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol><symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol><symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol><symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol><symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol><symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol><symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol><symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol><symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol><symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol><symbol id="i-unlink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-.12-7.07 5 5 0 0 0-6.95 0l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 .12 7.07 5 5 0 0 0 6.95 0l1.71-1.71"/><path d="M8 2v3M2 8h3M16 19v3M19 16h3"/></symbol><symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol><symbol id="i-arrow-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></symbol><symbol id="i-arrow-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m18 9-6-6-6 6"/><path d="M12 3v14"/><path d="M5 21h14"/></symbol><symbol id="i-scale" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></symbol><symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol><symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol><symbol id="i-file-sheet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2M14 13h2M8 17h2M14 17h2"/></symbol></svg>
 
   <!-- ═══════════════════════════════════════════════════════════════
        WELCOME SCREEN
@@ -568,6 +598,7 @@
         <div class="cwb-nav-item" onclick="cwbNav('base',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-clipboard"/></svg></span>Base Case</div>
         <div class="cwb-nav-item" onclick="cwbNav('rules',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg></span>Rules</div>
         <div class="cwb-nav-item" onclick="cwbNav('multimonth',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg></span>Multi-Month Report</div>
+        <div class="cwb-nav-item" onclick="cwbNav('reconcile',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-scale"/></svg></span>Reconcile</div>
       </div>
       <div class="sb-section">
         <div class="sb-label">Admin</div>
@@ -640,6 +671,7 @@
         <button class="tab-btn" data-tab="accounts"><svg class="ic" aria-hidden="true"><use href="#i-landmark"/></svg> Accounts</button>
         <button class="tab-btn" data-tab="rules"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg> Rules</button>
         <button class="tab-btn" data-tab="multimonth"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg> Multi-Month Report</button>
+      <button class="tab-btn" data-tab="reconcile"><svg class="ic" aria-hidden="true"><use href="#i-scale"/></svg> Reconcile</button>
         <button class="tab-btn" data-tab="admin"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg> Admin</button>
         <button class="tab-btn" data-tab="audit"><svg class="ic" aria-hidden="true"><use href="#i-history"/></svg> Audit Log</button>
         <button class="tab-btn" data-tab="instructions"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg> Instructions</button>
@@ -665,6 +697,7 @@
               <button class="btn btn-ghost" id="reapplyBtn"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg> Reapply Rules</button>
               <button class="btn btn-danger" id="resetBtn"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg> Reset Month</button>
             </div>
+            <div class="stale-hint" id="staleHint" style="display:none"></div>
             <!-- Row 2: process a new month -->
             <div class="month-selectors" style="margin-bottom:12px">
               <label style="font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em">New month</label>
@@ -913,6 +946,21 @@
       </div>
 
       <!-- ── Accounts ── -->
+      <!-- ── Reconcile ── -->
+      <div class="tab-panel" id="reconcile">
+        <div class="panel">
+          <div class="panel-head">
+            Reconciliation to the FinModel balance sheet
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" id="reconRefreshBtn"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg> Refresh</button>
+              <button class="btn btn-teal btn-sm" id="reconPackBtn"><svg class="ic" aria-hidden="true"><use href="#i-file-sheet"/></svg> Download reconciliation pack (.xlsx)</button>
+            </div>
+          </div>
+          <div class="hint" id="reconSub" style="padding:8px 16px 0"></div>
+          <div id="reconBody" style="padding:12px 16px 16px"><div class="recon-note">Loading…</div></div>
+        </div>
+      </div>
+
       <div class="tab-panel" id="accounts">
         <div class="panel">
           <div class="panel-head">
@@ -939,6 +987,13 @@
 
       <!-- ── Rules ── -->
       <div class="tab-panel" id="rules">
+        <div class="panel">
+          <div class="panel-head">
+            Rule health
+            <button class="btn btn-ghost btn-sm" id="ruleHealthBtn"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg> Check rules against the loaded month</button>
+          </div>
+          <div id="ruleHealthBody" style="padding:10px 16px 14px"><div class="hint">Finds rules that can never match, rules an earlier rule always beats, and duplicates.</div></div>
+        </div>
         <div class="panel">
           <div class="panel-head">
             Saved Mapping Rules
@@ -1149,6 +1204,19 @@
   <!-- ═══════════════════════════════════════════════════════════════
        OTP APPROVAL MODAL
   ═══════════════════════════════════════════════════════════════ -->
+  <div id="previewModal" class="modal-overlay">
+    <div class="modal-card wide">
+      <h3 id="previewTitle">Reapply preview</h3>
+      <p>Nothing is saved until you choose Apply. This is what the current rules and account filters would do to the saved source files.</p>
+      <div id="previewBody"></div>
+      <div class="action-bar">
+        <button class="btn btn-teal" id="previewApplyBtn"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg> Apply reapply</button>
+        <button class="btn btn-ghost" id="previewCsvBtn"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg> Download changes (CSV)</button>
+        <button class="btn btn-ghost" id="previewCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="approvalModal" class="modal-overlay">
     <div class="modal-card">
       <h3>Enter Approval Code</h3>
@@ -1224,6 +1292,7 @@
       // Show sidebar search only on Rules tab
       const sbSearch = document.querySelector('.cwb-sidebar .sb-search');
       if (sbSearch) sbSearch.classList.toggle('visible', tabId === 'rules');
+      if (tabId === 'reconcile' && window.cashflowApp && window.cashflowApp.loadRecon) window.cashflowApp.loadRecon();
       // Sidebar active state
       document.querySelectorAll('.cwb-nav-item').forEach(n => n.classList.remove('active'));
       if (el) el.classList.add('active');
