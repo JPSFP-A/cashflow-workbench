@@ -22,6 +22,11 @@
   // Groups base_case_rows into sections using state.sections lookup.
   // Section order = min sort_order within each section.
   // Rows with no section entry go into "(Other)".
+  // A base row counts toward net cash flow only when it sits in a section; the rest are bank legs and transfers.
+  function baseRowInNet(name) {
+    return state.sections.some((s) => s.base_case_row === name && s.active !== false);
+  }
+
   function buildSectionMap(baseRowKeys) {
     // Build section → [{br, sort_order}] map
     const secRows = new Map();
@@ -599,14 +604,18 @@
 
     let grandTotal = 0;
     const bodyRows = [];
+    const otherRows = [];
 
     for (const [secName, secBrs] of sections) {
       const presentBrs = secBrs.filter((br) => bcMap.has(br));
       if (!presentBrs.length) continue;
+      // Rows with no section (bank legs of AP payments, transfers, bank charges) are shown below the net, not in it.
+      const inNet = secName !== "(Other)";
+      const out = inNet ? bodyRows : otherRows;
 
       // Section header
-      bodyRows.push(`<tr style="background:#1e3a5f">
-        <td colspan="4" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${esc(secName.toUpperCase())}</td>
+      out.push(`<tr style="background:#1e3a5f">
+        <td colspan="4" style="color:#fff;font-weight:700;padding:5px 12px;font-size:11.5px;letter-spacing:.4px">${inNet ? esc(secName.toUpperCase()) : "NOT IN THE CASH FLOW: BANK LEGS AND TRANSFERS (ASSIGN A SECTION TO INCLUDE)"}</td>
       </tr>`);
 
       let secTotal = 0;
@@ -616,14 +625,14 @@
         let bcTotal = 0, bcLines = 0;
         catMap.forEach((d) => { bcTotal += d.amount; bcLines += d.lines; });
         secTotal   += bcTotal;
-        grandTotal += bcTotal;
+        if (inNet) grandTotal += bcTotal;
 
         const bcColor  = bcTotal < 0 ? "var(--red)" : "inherit";
         const bcActive = selBc === bc && !selCat ? "background:#dbeafe;" : "";
         const bcIdx    = _baseClicks.length;
         _baseClicks.push({ base_case_row: bc, cashbook_category: null });
 
-        bodyRows.push(`<tr data-bidx="${bcIdx}" class="base-row-click" style="${bcActive}cursor:pointer">
+        out.push(`<tr data-bidx="${bcIdx}" class="base-row-click" style="${bcActive}cursor:pointer">
           <td style="padding-left:20px">${esc(bc)}</td>
           <td class="num" style="color:${bcColor}">${money(bcTotal)}</td>
           <td class="num" style="color:${bcColor}">${money(bcTotal / 1000)}</td>
@@ -637,7 +646,7 @@
             const catActive = selBc === bc && selCat === cat ? "background:#dbeafe;" : "";
             const catIdx   = _baseClicks.length;
             _baseClicks.push({ base_case_row: bc, cashbook_category: cat });
-            bodyRows.push(`<tr data-bidx="${catIdx}" class="base-row-click" style="${catActive}cursor:pointer">
+            out.push(`<tr data-bidx="${catIdx}" class="base-row-click" style="${catActive}cursor:pointer">
               <td style="padding-left:40px;color:var(--muted);font-size:12px">${esc(cat)}</td>
               <td class="num" style="color:${c};font-size:12px">${money(d.amount)}</td>
               <td class="num" style="color:${c};font-size:12px">${money(d.amount / 1000)}</td>
@@ -648,8 +657,8 @@
 
       // Section total row
       const stColor = secTotal < 0 ? "var(--red)" : "inherit";
-      bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
-        <td style="padding-left:20px;font-weight:700">Total ${esc(secName)}</td>
+      out.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8">
+        <td style="padding-left:20px;font-weight:700">${inNet ? "Total " + esc(secName) : "Total not in net cash flow"}</td>
         <td class="num" style="font-weight:700;color:${stColor}">${money(secTotal)}</td>
         <td class="num" style="font-weight:700;color:${stColor}">${money(secTotal / 1000)}</td>
         <td class="num"></td>
@@ -686,6 +695,8 @@
       </tr>
       <tr><td colspan="4" style="color:var(--muted);font-size:11.5px;padding:4px 12px 8px">Balance sheet cash moved from ${money(Number(un.opening_cash || 0) / 1000)} to ${money(Number(un.closing_cash || 0) / 1000)} (US$'000). The rows above explain what the bank accounts show beyond the cash flow lines; this row is what none of them explains. Set by ${esc(un.set_by || "the month-end close")}${un.set_at ? " on " + esc(String(un.set_at).slice(0, 10)) : ""}.</td></tr>`);
     }
+
+    bodyRows.push(...otherRows);
 
     tbl.innerHTML = `<thead><tr><th>Cash Flow (US$'000)</th><th class="num">US$</th><th class="num">US$'000</th><th class="num">Lines</th></tr></thead><tbody>${bodyRows.join("")}</tbody>`;
   }
@@ -745,8 +756,10 @@
       ...grouped.filter((g) => !baseRows.includes(g.name))
     ];
     // Append a NET row
-    const net = ordered.reduce((s, r) => s + r.amount, 0);
+    const net = ordered.filter((r) => baseRowInNet(r.name)).reduce((s, r) => s + r.amount, 0);
     const netRow = { name: "NET CASH FLOW", amount: net, lines: null, unmapped: null };
+    const outside = ordered.filter((r) => !baseRowInNet(r.name));
+    const outsideRow = outside.length ? { name: "Not in net (no section): " + outside.map((r) => r.name).join(", "), amount: outside.reduce((s, r) => s + r.amount, 0), lines: null, unmapped: null } : null;
 
     const heads = [
       { label: "Base Case Row", key: "name",
@@ -760,7 +773,7 @@
       { label: "Lines",    key: "lines",    num: true, render: (r) => r.lines    != null ? String(r.lines)    : "" },
       { label: "Unmapped", key: "unmapped", num: true, render: (r) => r.unmapped != null ? (r.unmapped ? `<span class="bad">${r.unmapped}</span>` : "0") : "" }
     ];
-    table("baseTable", heads, [...ordered, netRow]);
+    table("baseTable", heads, [...ordered, netRow, ...(outsideRow ? [outsideRow] : [])]);
   }
 
   function renderOutflows() {
@@ -2087,12 +2100,12 @@
 
       // Section total
       bodyRows.push(`<tr style="background:#edf3f8;border-bottom:2px solid #c9d8e8;font-weight:700">
-        <td style="padding-left:20px">Total ${esc(secName)}</td>
-        ${secColTotals.map((t, i) => { grandColTotals[i] += t; return fmtK(t, true); }).join("")}
+        <td style="padding-left:20px">${secName === "(Other)" ? "Total not in net cash flow" : "Total " + esc(secName)}</td>
+        ${secColTotals.map((t, i) => { if (secName !== "(Other)") grandColTotals[i] += t; return fmtK(t, true); }).join("")}
         ${fmtK(secTotal, true)}
       </tr>`);
 
-      grandTotal += secTotal;
+      if (secName !== "(Other)") grandTotal += secTotal;
     }
 
     // Net Inflow row
@@ -2275,9 +2288,11 @@
         vals.forEach((v, i) => { scTotals[i] += v; });
         scTotal += r.total / 1000;
       }
-      dataRows.push({ label: "Total " + secName, vals: scTotals, total: scTotal, level: "subtotal" });
-      scTotals.forEach((v, i) => { gcTotals[i] += v; });
-      gcTotal += scTotal;
+      dataRows.push({ label: secName === "(Other)" ? "Total not in net cash flow" : "Total " + secName, vals: scTotals, total: scTotal, level: "subtotal" });
+      if (secName !== "(Other)") {
+        scTotals.forEach((v, i) => { gcTotals[i] += v; });
+        gcTotal += scTotal;
+      }
     }
     dataRows.push({ label: "Net Inflow / (Outflow)", vals: gcTotals, total: gcTotal, level: "total" });
 
