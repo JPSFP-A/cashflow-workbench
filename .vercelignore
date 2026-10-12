@@ -1,0 +1,5 @@
+# Repo-side files that must not be served as static downloads
+CLAUDE.md
+INCIDENT_*.md
+.claude/
+supabase/
