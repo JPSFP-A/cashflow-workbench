@@ -1395,11 +1395,21 @@
       created_by: userName(),
       updated_by: userName()
     }));
-    if (!parsed.length) return;
+    if (!parsed.length) return true;
+    const badRanges = parsed
+      .map((r) => ({ code: r.rule_code, msg: rangeFormatProblem(r.rule_type, r.match_value) }))
+      .filter((r) => r.msg);
+    if (badRanges.length) {
+      const shown = badRanges.slice(0, 3).map((r) => `${r.code}: ${r.msg}`).join(" | ");
+      const more = badRanges.length > 3 ? ` (+${badRanges.length - 3} more)` : "";
+      setStatus(`Import stopped, nothing saved. ${badRanges.length} rule(s) have a bad range. ${shown}${more}`, "error");
+      return false;
+    }
     const { error } = await state.supabase.from("cashflow_rules").upsert(parsed, { onConflict: "rule_code" });
-    if (error) return setStatus(error.message, "error");
+    if (error) { setStatus(error.message, "error"); return false; }
     await auditLog("import_rules", currentMonthKey(), "", `Imported ${parsed.length} rules from CSV`);
     await loadRules();
+    return true;
   }
 
   // ── 429-retry fetch ───────────────────────────────────────────────
@@ -1580,7 +1590,7 @@
         return setStatus("Upload at least one source file before processing.", "error");
       }
       const mappingCsv = await readFile($("mappingFile"));
-      if (mappingCsv) { setStatus("Importing rules from CSV…", ""); await importRulesFromCsv(mappingCsv); }
+      if (mappingCsv) { setStatus("Importing rules from CSV…", ""); if (!(await importRulesFromCsv(mappingCsv))) return; }
       setStatus("Parsing AP report and cashbook files…", "");
       const cashbookRows = mergeCashbooks(uploads.cashbook_description, uploads.cashbook_account);
       const apRows = parseAp(uploads.ap, "invoice_payments.txt");
