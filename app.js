@@ -1864,6 +1864,12 @@
     }
     if (!rule.match_value || !rule.category) return setStatus("Match value and category are required.", "error");
 
+    // Range conditions need both ends. A single value saves fine but can never match, which is how dead rules happen.
+    const rangeProblem = [["Condition 1", rule.rule_type, rule.match_value], ["Condition 2", rule.cond2_type, rule.cond2_value], ["Condition 3", rule.cond3_type, rule.cond3_value]]
+      .map(([label, t, v]) => { const msg = rangeFormatProblem(t, v); return msg ? `${label}: ${msg}` : ""; })
+      .find(Boolean);
+    if (rangeProblem) return setStatus(rangeProblem, "error");
+
     // Duplicate check — warn if another active rule has the same type + match + scope
     const dupe = state.rules.find((r) =>
       r.rule_code !== rule.rule_code &&
@@ -2551,6 +2557,15 @@
   const TIE_OK = 1000;        // US$ — treated as tied
   const TIE_NEAR = 100000;    // US$ — worth a look, not a break
   const RANGE_TYPES = ["cashbook_cost_range", "fpc_range", "jobno_range"];
+  // A range condition must read "from-to". A single value such as 0380 never matches anything, because the
+  // range check needs both ends; the way to match one value is 0380-0380.
+  function rangeFormatProblem(type, value) {
+    if (!RANGE_TYPES.includes(type) || !value) return "";
+    const v = String(value).trim();
+    const sep = v.indexOf("-", 1);
+    if (sep < 1 || !v.slice(sep + 1).trim()) return `"${v}" is not a range. Use from-to, for example ${v.replace(/-+$/, "")}-${v.replace(/-+$/, "")} for a single value.`;
+    return "";
+  }
   const bracket = (v) => (Number(v) < 0 ? "(" + money(Math.abs(v)) + ")" : money(v));
   const shortMoney = (v) => {
     const n = Number(v || 0), a = Math.abs(n);
@@ -2864,7 +2879,7 @@
 
   // ── Rule health ───────────────────────────────────────────────────────
   function rangeValueBroken(type, value) {
-    return RANGE_TYPES.includes(type) && value && String(value).indexOf("-", 1) < 1;
+    return !!rangeFormatProblem(type, value);
   }
   function ruleDeadReason(rule) {
     const bad = [[rule.rule_type, rule.match_value], [rule.cond2_type, rule.cond2_value], [rule.cond3_type, rule.cond3_value]].find(([t, v]) => rangeValueBroken(t, v));
