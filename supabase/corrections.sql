@@ -30,9 +30,12 @@ create table if not exists public.cashflow_record_corrections (
   revert_reason   text
 );
 
--- One active correction per line and field. A newer correction supersedes (reverts) the older one first.
-create unique index if not exists cashflow_corrections_one_active
-  on public.cashflow_record_corrections (month_key, record_key, field) where status = 'active';
+-- One active correction per line and field. A correction whose line has gone (unmatched) no longer claims a line
+-- number, so it cannot block another correction from moving there. A newer correction supersedes the older one.
+drop index if exists public.cashflow_corrections_one_active;
+create unique index cashflow_corrections_one_active
+  on public.cashflow_record_corrections (month_key, record_key, field)
+  where status = 'active' and match_status <> 'unmatched';
 create index if not exists cashflow_corrections_month
   on public.cashflow_record_corrections (month_key, status);
 
@@ -43,6 +46,11 @@ create policy cw_corrections_auth_all on public.cashflow_record_corrections
   for all
   using ((select public.jps_has_any_app('{cashflow}'::text[])))
   with check ((select public.jps_has_any_app('{cashflow}'::text[])));
+
+-- Grants. This project does not grant new tables to the API roles automatically, so without these the app gets
+-- "permission denied" and process and reapply fail. No anon access: the table policy needs a signed-in user anyway.
+grant select, insert, update, delete on public.cashflow_record_corrections to authenticated;
+grant all on public.cashflow_record_corrections to service_role;
 
 -- Writes that touch several rows run as one transaction, so a failure part-way cannot leave the log inconsistent.
 -- Both run as the caller (security invoker), so the table policy above still decides who can use them.
@@ -60,7 +68,8 @@ begin
   update public.cashflow_record_corrections c
      set status = 'reverted', reverted_by = p_who, reverted_at = now(), revert_reason = 'Superseded by a newer correction'
     from jsonb_to_recordset(p_rows) as i(month_key text, record_key text, field text)
-   where c.status = 'active' and c.month_key = i.month_key and c.record_key = i.record_key and c.field = i.field;
+   where c.status = 'active' and c.match_status <> 'unmatched'
+     and c.month_key = i.month_key and c.record_key = i.record_key and c.field = i.field;
 
   insert into public.cashflow_record_corrections
     (month_key, record_key, fingerprint, field, original_value, corrected_value, reason, line_summary, corrected_by, corrected_at, last_checked_at)
@@ -76,31 +85,37 @@ begin
   return n;
 end $$;
 
--- Moves corrections to new line numbers after a source file shifted them. Parks every key first so neighbouring
--- lines that each move by one do not clash on the unique index.
-create or replace function public.cashflow_relocate_corrections(p_rows jsonb)
+-- Records what happened to every correction on a save, in one transaction: unmatched first (they leave the index),
+-- then moved lines (keys are parked first so neighbours that each shift by one do not clash), then lines in place.
+create or replace function public.cashflow_record_correction_outcomes(p_rows jsonb)
 returns integer
 language plpgsql
 security invoker
 set search_path = public
 as $$
-declare n integer;
 begin
-  update public.cashflow_record_corrections c set record_key = '~' || c.id::text
-    from jsonb_to_recordset(p_rows) as i(id uuid, record_key text) where c.id = i.id;
-  update public.cashflow_record_corrections c
-     set record_key = i.record_key, match_status = 'relocated', last_checked_at = now()
-    from jsonb_to_recordset(p_rows) as i(id uuid, record_key text) where c.id = i.id;
-  get diagnostics n = row_count;
-  return n;
+  update public.cashflow_record_corrections c set match_status = 'unmatched', last_checked_at = now()
+    from jsonb_to_recordset(p_rows) as i(id uuid, match_status text, record_key text)
+   where c.id = i.id and i.match_status = 'unmatched';
+
+  update public.cashflow_record_corrections c set record_key = '~' || c.id::text, match_status = 'relocated'
+    from jsonb_to_recordset(p_rows) as i(id uuid, match_status text, record_key text)
+   where c.id = i.id and i.match_status = 'relocated';
+
+  update public.cashflow_record_corrections c set record_key = i.record_key, last_checked_at = now()
+    from jsonb_to_recordset(p_rows) as i(id uuid, match_status text, record_key text)
+   where c.id = i.id and i.match_status = 'relocated';
+
+  update public.cashflow_record_corrections c set match_status = 'applied', last_checked_at = now()
+    from jsonb_to_recordset(p_rows) as i(id uuid, match_status text, record_key text)
+   where c.id = i.id and i.match_status = 'applied';
+
+  return jsonb_array_length(p_rows);
 end $$;
 
--- Grants. This project does not grant new tables to the API roles automatically, so without these the app gets
--- "permission denied" and process and reapply fail. No anon access: the table policy needs a signed-in user anyway.
-grant select, insert, update, delete on public.cashflow_record_corrections to authenticated;
-grant all on public.cashflow_record_corrections to service_role;
+drop function if exists public.cashflow_relocate_corrections(jsonb);
 
 revoke execute on function public.cashflow_add_corrections(jsonb, text) from public, anon;
-revoke execute on function public.cashflow_relocate_corrections(jsonb) from public, anon;
+revoke execute on function public.cashflow_record_correction_outcomes(jsonb) from public, anon;
 grant execute on function public.cashflow_add_corrections(jsonb, text) to authenticated, service_role;
-grant execute on function public.cashflow_relocate_corrections(jsonb) to authenticated, service_role;
+grant execute on function public.cashflow_record_correction_outcomes(jsonb) to authenticated, service_role;

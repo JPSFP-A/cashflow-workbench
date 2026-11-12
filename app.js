@@ -2510,22 +2510,11 @@
 
   // Stores whether each correction matched a line on this save. Returns a short note for the status line.
   async function recordCorrectionOutcomes(res) {
-    const now = timestamp();
     try {
-      const groups = new Map();
-      res.outcomes.forEach((o) => { if (!groups.has(o.match_status)) groups.set(o.match_status, []); groups.get(o.match_status).push(o); });
-      for (const [status, list] of groups) {
-        if (status === "relocated") {
-          // One transaction: neighbouring lines that each moved by one would otherwise clash on the unique index.
-          const { error } = await state.supabase.rpc("cashflow_relocate_corrections", { p_rows: list.map((o) => ({ id: o.id, record_key: o.record_key })) });
-          if (error) throw error;
-        } else {
-          for (let i = 0; i < list.length; i += 100) {
-            const { error } = await state.supabase.from("cashflow_record_corrections").update({ match_status: status, last_checked_at: now }).in("id", list.slice(i, i + 100).map((o) => o.id));
-            if (error) throw error;
-          }
-        }
-      }
+      // One transaction for every correction of the month: lines that vanished leave the unique index first, then
+      // moved lines change number together (neighbours that each shift by one would otherwise clash).
+      const { error } = await state.supabase.rpc("cashflow_record_correction_outcomes", { p_rows: res.outcomes });
+      if (error) throw error;
     } catch (err) {
       return ` · corrections applied, but their status could not be saved: ${err.message}`;
     }
