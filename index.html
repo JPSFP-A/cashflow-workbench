@@ -388,6 +388,12 @@
 
     .multi-report-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0 16px 14px; }
 
+    /* ── Corrections ──────────────────────────────────────────────── */
+    .corr-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; padding: 14px 16px; }
+    .corr-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .corr-form input, .corr-form select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-weight: 400; color: var(--ink); background: var(--white); }
+    .corr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
     /* ── Admin / modal ───────────────────────────────────────────── */
     .modal-overlay {
       display: none; position: fixed; inset: 0; z-index: 5000;
@@ -595,6 +601,7 @@
         <div class="sb-label">Workbench</div>
         <div class="cwb-nav-item active" onclick="cwbNav('outflows',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-check-circle"/></svg></span>Validation</div>
         <div class="cwb-nav-item" onclick="cwbNav('exceptions',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>Map Exceptions<span class="ni-badge" id="sideExcBadge" style="display:none"></span></div>
+        <div class="cwb-nav-item" onclick="cwbNav('corrections',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg></span>Corrections</div>
         <div class="cwb-nav-item" onclick="cwbNav('base',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-clipboard"/></svg></span>Base Case</div>
         <div class="cwb-nav-item" onclick="cwbNav('rules',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg></span>Rules</div>
         <div class="cwb-nav-item" onclick="cwbNav('multimonth',this)"><span class="ni-icon"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg></span>Multi-Month Report</div>
@@ -667,6 +674,7 @@
         <button class="tab-btn" data-tab="outflows"><svg class="ic" aria-hidden="true"><use href="#i-check-circle"/></svg> Validation</button>
         <button class="tab-btn" data-tab="allentries"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg> All Entries</button>
         <button class="tab-btn" data-tab="exceptions"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg> Map Exceptions <span class="tab-badge" id="excBadge"></span></button>
+        <button class="tab-btn" data-tab="corrections"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg> Corrections</button>
         <button class="tab-btn" data-tab="base"><svg class="ic" aria-hidden="true"><use href="#i-clipboard"/></svg> Base Case</button>
         <button class="tab-btn" data-tab="accounts"><svg class="ic" aria-hidden="true"><use href="#i-landmark"/></svg> Accounts</button>
         <button class="tab-btn" data-tab="rules"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg> Rules</button>
@@ -766,6 +774,80 @@
           <span id="allEntriesMeta" style="font-size:12px;color:var(--muted)"></span>
         </div>
         <div class="tablebox tall"><table id="allEntriesTable"></table></div>
+      </div>
+
+      <!-- ── Corrections ── -->
+      <div class="tab-panel" id="corrections">
+        <div class="panel" style="margin-bottom:12px">
+          <div class="panel-head">1. Find the lines to correct <span class="hint" id="corrMonthHint"></span></div>
+          <div class="search-bar">
+            <input id="corrSearch" placeholder="Search vendor, description, FPC, job #, category, base row…">
+            <select id="corrScope">
+              <option value="unmapped">Unmapped lines</option>
+              <option value="all">All lines</option>
+              <option value="corrected">Corrected lines</option>
+            </select>
+            <select id="corrSource">
+              <option value="all">All sources</option>
+              <option value="ap">AP (Invoice Payments)</option>
+              <option value="cashbook">Cashbook</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" id="corrSelectAll">Select all matching</button>
+            <button class="btn btn-ghost btn-sm" id="corrClearSel">Clear</button>
+            <span class="hint" id="corrSelCount"></span>
+            <span class="hint" id="corrShownMeta"></span>
+          </div>
+          <div class="tablebox tall"><table id="corrLinesTable"></table></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:12px">
+          <div class="panel-head">2. Correct a field the rules read <span class="hint" style="font-weight:400">Nothing is saved until you click <strong>Apply correction</strong>. Every change is logged and the line is marked.</span></div>
+          <div class="corr-form">
+            <label>Field
+              <select id="corrField"></select>
+            </label>
+            <label>How
+              <select id="corrMode">
+                <option value="set">Set to a new value</option>
+                <option value="replace">Find and replace within the field</option>
+              </select>
+            </label>
+            <label id="corrSetWrap">New value
+              <input id="corrValue" placeholder="e.g. FUEL PURCHASE">
+            </label>
+            <span id="corrReplaceWrap" style="display:none;grid-column:span 2">
+              <span class="corr-pair">
+                <label>Find <input id="corrFind" placeholder="text to find"></label>
+                <label>Replace with <input id="corrRepl" placeholder="replacement"></label>
+              </span>
+            </span>
+            <label style="grid-column:1/-1">Reason (required, saved in the log)
+              <input id="corrReason" maxlength="300" placeholder="e.g. Oracle loaded these fuel invoices with the wrong pay group">
+            </label>
+          </div>
+          <div class="multi-report-actions">
+            <button class="btn btn-ghost" id="corrPreviewBtn"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg> Preview</button>
+            <button class="btn btn-primary" id="corrApplyBtn" disabled><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg> Apply correction</button>
+          </div>
+          <div id="corrPreview" style="padding:0 16px 14px"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            3. Corrections log <span class="hint" id="corrLogMeta"></span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="corrLogMonth" title="Month"></select>
+              <select id="corrLogStatus" title="Status">
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="reverted">Reverted</option>
+                <option value="unmatched">Not matched</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" id="corrExportBtn"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg> CSV</button>
+            </div>
+          </div>
+          <div class="tablebox tall"><table id="corrLogTable"></table></div>
+        </div>
       </div>
 
       <!-- ── Map Exceptions ── -->
@@ -1115,6 +1197,7 @@
             <li>To process a <b>new</b> month: upload the AP invoice/payment report and the two cashbook text exports (180 and 132 formats), then click <b>▶ Process &amp; Save</b>. The app parses and applies rules first, shows the record count, then asks <em>"What month is this for?"</em> — enter YYYY-MM and confirm. You can also pre-fill the month date field to skip the prompt. Raw source text and processed records are stored in Supabase.</li>
             <li>The <b>Outflow Validation</b> tab opens first. Review AP outflows by base case row and by category, and the cashbook summary side-by-side.</li>
             <li>Switch to <b>Map Exceptions</b> to see unmapped lines or lines with no base case row. Click <b>Map</b> on any row to pre-fill the rule form. Save the rule, then click <b>Reapply Now</b> to rebuild immediately.</li>
+            <li>If a line was <b>loaded with a wrong description, category, vendor, pay group or another field a rule reads</b>, fix it in <b>Corrections</b> instead of editing the source file. Find the lines, choose the field, enter the new value (or find and replace) and a reason, preview the effect, then apply. Each correction is logged with who, when and why, the line is marked <em>Corrected</em>, and it is re-applied automatically every time the month is reprocessed or reapplied. Corrections are blocked on locked months. Revert any correction from the log.</li>
             <li>Use <b><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg> Reapply Rules</b> from the month panel at any time to re-run all rules against the saved source files without re-uploading.</li>
             <li>Use <b>Multi-Month Report</b> to compare any combination of saved months side-by-side as a base case matrix, with expandable sub-group rows. Download as Excel.</li>
             <li>When the month is finalised, go to the <b>Admin</b> tab and click <b>Submit for Approval</b>. A 6-digit code is emailed to the configured approver. The approver enters the code to <b>lock the month</b>. A locked month shows (locked) in the dropdown and cannot be reprocessed or have rules reapplied — protecting the final figures from accidental change.</li>
@@ -1254,6 +1337,7 @@
   <script>
     JpsMonitor.init({ getClient: () => window.APP_SUPABASE_CLIENT, appName: 'cashflow' });
   </script>
+  <script src="./corrections-core.js"></script>
   <script src="./app.js"></script>
   <script>
     // ── Theme management ──────────────────────────────────────────
@@ -1293,6 +1377,7 @@
       const sbSearch = document.querySelector('.cwb-sidebar .sb-search');
       if (sbSearch) sbSearch.classList.toggle('visible', tabId === 'rules');
       if (tabId === 'reconcile' && window.cashflowApp && window.cashflowApp.loadRecon) window.cashflowApp.loadRecon();
+      if (tabId === 'corrections' && window.cashflowApp && window.cashflowApp.openCorrections) window.cashflowApp.openCorrections();
       // Sidebar active state
       document.querySelectorAll('.cwb-nav-item').forEach(n => n.classList.remove('active'));
       if (el) el.classList.add('active');

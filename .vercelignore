@@ -3,3 +3,4 @@ CLAUDE.md
 INCIDENT_*.md
 .claude/
 supabase/
+tests/

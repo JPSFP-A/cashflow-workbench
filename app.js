@@ -57,6 +57,7 @@
     supabase: null, rules: [], records: [], uploads: {}, months: [], audit: [], subGroups: [], sections: [], accountFilters: [], unexplained: null,
     loadedMonth: null, loadedAt: null, loadedBy: null, loadedMonthId: null, busy: false,
     multiReport: null, multiCollapsed: new Set(), settings: {},
+    corrSel: new Set(), corrPlan: null, corrLog: [], corrActive: [],
     pendingApprovalMonth: null,   // month key waiting for OTP entry
     recon: [], reconSel: null, reconError: "", ruleHealth: null, previewPlan: null,
     apDetailLoaded: false,        // true when AP detail columns merged into state.records
@@ -850,7 +851,8 @@
       { label: "Orig (JMD)", key: "amount_original", num: true, render: (r) => r.amount_original ? money(r.amount_original) : "" },
       { label: "Amt Paid",   key: "amount_paid",   num: true, render: (r) => r.amount_paid   ? money(r.amount_paid)   : "" },
       { label: "Currency",   key: "currency" },
-      { label: "Void",       key: "void_flag" }
+      { label: "Void",       key: "void_flag" },
+      { label: "Corrected",  key: "corrected", render: correctedMarker }
     ], rows);
   }
 
@@ -1001,8 +1003,16 @@
       { label: "Category",  key: "cashbook_category" },
       { label: "Base Row",  key: "base_case_row" },
       { label: "Rule",      key: "mapping_rule" },
-      { label: "Mapped",    key: "mapped", render: (r) => r.mapped ? '<span style="color:var(--teal)">' + ICO('check') + '</span>' : '<span class="bad">' + ICO('x') + '</span>' }
+      { label: "Mapped",    key: "mapped", render: (r) => r.mapped ? '<span style="color:var(--teal)">' + ICO('check') + '</span>' : '<span class="bad">' + ICO('x') + '</span>' },
+      { label: "Corrected", key: "corrected", render: correctedMarker }
     ], rows);
+  }
+
+  // Marks a line that carries a correction, and says which fields were corrected.
+  function correctedMarker(r) {
+    if (!r.corrected) return "";
+    const fields = String(r.corrected_fields || "").split(",").filter(Boolean).map(window.CwCorrections.labelOf).join(", ");
+    return `<span class="exc-badge norow" title="Corrected: ${esc(fields)}">${ICO("flag")} ${esc(fields || "Corrected")}</span>`;
   }
 
   function renderAudit() {
@@ -1026,6 +1036,11 @@
     if (name === "outflows")    { renderOutflows(); pendingRender.delete("outflows"); }
     else if (name === "allentries") { renderAllEntries(); pendingRender.delete("allentries"); }
     else if (name === "base")   { renderGroupedBase(); renderBaseDetail(); renderJobBreakdown(); pendingRender.delete("base"); }
+    else if (name === "corrections") {
+      renderCorrections();
+      pendingRender.delete("corrections");
+      loadCorrectionLog().then(renderCorrectionLog).catch((err) => setStatus(err.message, "error"));
+    }
     else if (name === "exceptions") {
       renderExceptions();
       pendingRender.delete("exceptions");
@@ -1043,6 +1058,7 @@
     pendingRender.add("allentries");
     pendingRender.add("base");
     pendingRender.add("exceptions");
+    pendingRender.add("corrections");
     renderDataTab(activeTabName());
   }
 
@@ -1550,7 +1566,7 @@
       const chunkSize = 1000;
       const total = records.length;
       setStatus(`Saving records… 0 / ${total.toLocaleString()}`, "");
-      const mapRow = (r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "", main_group: r.main_group || "", sub_group: r.sub_group || "", cc: r.cc || "", jobno: r.jobno || "", invoice_no: r.invoice_no || "", invoice_date: r.invoice_date || "", vendor_no: r.vendor_no || "", emp_no: r.emp_no || "", acct_date: r.acct_date || "", amount_original: r.amount_original ? num(r.amount_original) : null, voucher_number: r.voucher_number || "", po_no: r.po_no || "", operating_unit: r.operating_unit || "", bank_account: r.bank_account || "", check_no: r.check_no || "", check_date: r.check_date || "", amount_paid: r.amount_paid ? num(r.amount_paid) : null, void_flag: r.void || "", currency: r.currency || "", line_no: r.line_no || "" });
+      const mapRow = (r) => ({ month_id: monthId, record_key: r.record_key, data_source: r.data_source, source_file: r.source_file, role: r.role, source: r.source || "", category_code: r.category_code || "", batch_name: r.batch_name || "", je_name: r.je_name || "", account: r.account || "", description: r.description || "", entry_item: r.entry_item || "", debit_usd: r.debit_usd || 0, credit_usd: r.credit_usd || 0, amount: r.amount || 0, signed_amount: r.signed_amount || 0, vendor: r.vendor || "", pay_group: r.pay_group || "", fpc: r.fpc || "", cost_item: r.cost_item || "", cashbook_category: r.cashbook_category || "", base_case_row: r.base_case_row || "", mapped: !!r.mapped, mapping_rule: r.mapping_rule || "", main_group: r.main_group || "", sub_group: r.sub_group || "", corrected: !!r.corrected, corrected_fields: r.corrected_fields || "", cc: r.cc || "", jobno: r.jobno || "", invoice_no: r.invoice_no || "", invoice_date: r.invoice_date || "", vendor_no: r.vendor_no || "", emp_no: r.emp_no || "", acct_date: r.acct_date || "", amount_original: r.amount_original ? num(r.amount_original) : null, voucher_number: r.voucher_number || "", po_no: r.po_no || "", operating_unit: r.operating_unit || "", bank_account: r.bank_account || "", check_no: r.check_no || "", check_date: r.check_date || "", amount_paid: r.amount_paid ? num(r.amount_paid) : null, void_flag: r.void || "", currency: r.currency || "", line_no: r.line_no || "" });
       // Insert in controlled batches of 3 concurrent chunks — avoids statement timeout
       // while still being much faster than sequential one-at-a-time inserts.
       const chunks = [];
@@ -1597,8 +1613,8 @@
       const sourceRows = [...cashbookRows, ...apRows];
       if (!sourceRows.length) return setStatus("No records parsed — check your source files.", "error");
       setStatus(`Parsed ${sourceRows.length.toLocaleString()} records (${apRows.length.toLocaleString()} AP + ${cashbookRows.length.toLocaleString()} cashbook). Applying rules…`, "");
-      const processed = applyMappings(sourceRows, state.rules);
-      const unmapped = processed.filter((r) => !r.mapped && !r.account_excluded).length;
+      let processed = applyMappings(sourceRows, state.rules);
+      let unmapped = processed.filter((r) => !r.mapped && !r.account_excluded).length;
 
       // Ask what month this is for — after parsing so the user can see the record count
       let monthKey = $("monthInput").value;
@@ -1622,14 +1638,22 @@
         return setStatus("Overwrite cancelled.", "");
       }
 
+      // Re-apply any saved corrections for this month before the rules run, so a re-upload keeps them.
+      const corrRes = await correctionsFor(monthKey, sourceRows);
+      if (corrRes) {
+        processed = applyMappings(corrRes.rows, state.rules);
+        unmapped = processed.filter((r) => !r.mapped && !r.account_excluded).length;
+      }
+
       setStatus(`Saving ${processed.length.toLocaleString()} records for ${monthKey}…`, "");
       state.records = processed;
       state.uploads = uploads;
       await saveMonthToDb(monthKey, uploads, processed);
+      const corrNote = corrRes ? await recordCorrectionOutcomes(corrRes) : "";
       await loadMonths();
       await loadAudit();
       renderAll();
-      setStatus(`Saved ${monthKey} — ${processed.length.toLocaleString()} records, ${unmapped} unmapped`, "ok");
+      setStatus(`Saved ${monthKey} — ${processed.length.toLocaleString()} records, ${unmapped} unmapped${corrNote}`, "ok");
     } catch (err) {
       setStatus(err.message, "error");
     } finally {
@@ -1638,7 +1662,7 @@
   }
 
   // Slim column set for fast initial load — used for all calculations and rendering.
-  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,bank_account,cashbook_category,base_case_row,mapped,mapping_rule,main_group,sub_group,jobno";
+  const RECORD_COLS = "record_key,data_source,source_file,role,source,category_code,batch_name,je_name,account,description,entry_item,debit_usd,credit_usd,amount,signed_amount,vendor,pay_group,fpc,cost_item,bank_account,cashbook_category,base_case_row,mapped,mapping_rule,main_group,sub_group,jobno,corrected,corrected_fields";
   // AP detail columns — fetched lazily only when the Exceptions tab is opened.
   const AP_DETAIL_COLS = "record_key,cc,jobno,invoice_no,invoice_date,vendor_no,emp_no,acct_date,amount_original,voucher_number,po_no,operating_unit,bank_account,check_no,check_date,amount_paid,void_flag,currency,line_no";
 
@@ -1753,9 +1777,18 @@
     // Warn if approved / locked
     const savedMonth = state.months.find((m) => m.month_key === monthKey);
     const isLocked = savedMonth && savedMonth.status === "approved";
-    const confirmMsg = isLocked
+    // Saved corrections are not wiped with the month: they re-apply if the month is uploaded again.
+    let corrNote = "";
+    try {
+      const { count, error } = await state.supabase.from("cashflow_record_corrections").select("id", { count: "exact", head: true }).eq("month_key", monthKey).eq("status", "active");
+      if (error) throw error;
+      if (count) corrNote = `\n\n${count} saved correction(s) for ${monthKey} are kept and will be re-applied if you upload this month again. Revert them in the Corrections tab first if you do not want that.`;
+    } catch (err) {
+      corrNote = `\n\nCould not check for saved corrections (${err.message}).`;
+    }
+    const confirmMsg = (isLocked
       ? `WARNING: ${monthKey} is APPROVED / LOCKED.\n\nDeleting an approved month is an exceptional action. Are you absolutely sure?`
-      : `Reset / wipe ALL data for ${monthKey}? This cannot be undone.`;
+      : `Reset / wipe ALL data for ${monthKey}? This cannot be undone.`) + corrNote;
     if (!confirm(confirmMsg)) return;
 
     setBusy(true);
@@ -2446,6 +2479,401 @@
     download(`cashflow_rules_${monthKey}.xls`, xlsWrap("Mapping Rules", monthKey, tableToCleanHtml($("rulesTable"))), "application/vnd.ms-excel");
   }
 
+  // ── Line corrections ──────────────────────────────────────────────
+  // Fix lines that loaded with a wrong description, category or another field a rule reads. Every correction is
+  // logged with a reason, marks the line, and is re-applied on each reprocess and reapply (see corrections-core.js).
+  const CC = window.CwCorrections;
+  const CORR_MAX_LINES = 1000;   // most lines changed in one go
+  const CORR_SHOW = 300;         // most lines listed at once
+
+  const monthIsLocked = (monthKey) => state.months.some((m) => m.month_key === monthKey && m.status === "approved");
+
+  async function runInBatches(items, size, fn) {
+    const out = [];
+    for (let i = 0; i < items.length; i += size) out.push(...await Promise.all(items.slice(i, i + size).map(fn)));
+    return out;
+  }
+
+  async function fetchCorrections(monthKey, statuses) {
+    const { data, error } = await state.supabase.from("cashflow_record_corrections").select("*")
+      .eq("month_key", monthKey).in("status", statuses || ["active"]).order("corrected_at", { ascending: false }).limit(5000);
+    if (error) throw error;
+    return data || [];
+  }
+
+  // The month's active corrections applied to freshly parsed rows, or null when there are none.
+  // A failure to read them stops the save, so a month is never saved without its corrections by accident.
+  async function correctionsFor(monthKey, sourceRows) {
+    const list = await fetchCorrections(monthKey);
+    return list.length ? CC.applyCorrectionsToRows(sourceRows, list) : null;
+  }
+
+  // Stores whether each correction matched a line on this save. Returns a short note for the status line.
+  async function recordCorrectionOutcomes(res) {
+    const now = timestamp();
+    try {
+      const groups = new Map();
+      res.outcomes.forEach((o) => { if (!groups.has(o.match_status)) groups.set(o.match_status, []); groups.get(o.match_status).push(o); });
+      for (const [status, list] of groups) {
+        if (status === "relocated") {
+          // One transaction: neighbouring lines that each moved by one would otherwise clash on the unique index.
+          const { error } = await state.supabase.rpc("cashflow_relocate_corrections", { p_rows: list.map((o) => ({ id: o.id, record_key: o.record_key })) });
+          if (error) throw error;
+        } else {
+          for (let i = 0; i < list.length; i += 100) {
+            const { error } = await state.supabase.from("cashflow_record_corrections").update({ match_status: status, last_checked_at: now }).in("id", list.slice(i, i + 100).map((o) => o.id));
+            if (error) throw error;
+          }
+        }
+      }
+    } catch (err) {
+      return ` · corrections applied, but their status could not be saved: ${err.message}`;
+    }
+    const parts = [`${res.applied + res.relocated} correction(s) applied`];
+    if (res.unmatched.length) parts.push(`${res.unmatched.length} not matched`);
+    return ` · ${parts.join(", ")}`;
+  }
+
+  function corrCandidateRows() {
+    const q = norm(($("corrSearch") || {}).value || "");
+    const scope = ($("corrScope") || {}).value || "unmapped";
+    const src = ($("corrSource") || {}).value || "all";
+    return state.records.filter((r) => {
+      if (scope === "unmapped" && (isExcludedRow(r) || (r.mapped && r.base_case_row))) return false;
+      if (scope === "corrected" && !r.corrected) return false;
+      if (src === "ap" && r.data_source !== "Invoice Payments") return false;
+      if (src === "cashbook" && r.data_source !== "Cashbook") return false;
+      if (q && !norm([r.vendor, r.vendor_no, r.pay_group, r.fpc, r.cost_item, r.jobno, r.description, r.category_code, r.source, r.je_name, r.batch_name, r.cashbook_category, r.base_case_row].join(" ")).includes(q)) return false;
+      return true;
+    });
+  }
+
+  function renderCorrectionLines() {
+    const tbl = $("corrLinesTable");
+    if (!tbl) return;
+    // A selection is only valid for the exact load it was made on: a re-upload or reapply can renumber the lines.
+    const stamp = `${state.loadedMonth}|${state.loadedAt}`;
+    if (state.corrSelMonth !== stamp) {
+      state.corrSel = new Set(); state.corrPlan = null; state.corrSelMonth = stamp;
+      if ($("corrPreview")) $("corrPreview").innerHTML = "";
+    }
+    const loaded = state.loadedMonth;
+    const nCorrected = state.records.filter((r) => r.corrected).length;
+    $("corrMonthHint").textContent = loaded
+      ? `${loaded}${monthIsLocked(loaded) ? " (locked, corrections are blocked)" : ""} · ${nCorrected.toLocaleString()} corrected line${nCorrected === 1 ? "" : "s"}`
+      : "Load a saved month first.";
+    if (!loaded) { tbl.innerHTML = ""; $("corrShownMeta").textContent = ""; $("corrSelCount").textContent = ""; return; }
+    const all = corrCandidateRows();
+    $("corrShownMeta").textContent = `${all.length.toLocaleString()} lines match${all.length > CORR_SHOW ? `, showing the first ${CORR_SHOW}` : ""}`;
+    $("corrSelCount").textContent = `${state.corrSel.size.toLocaleString()} selected`;
+    table("corrLinesTable", [
+      { label: "", key: "record_key", render: (r) => `<input type="checkbox" data-rk="${esc(r.record_key)}" ${state.corrSel.has(r.record_key) ? "checked" : ""} aria-label="Select this line">` },
+      { label: "Source",      key: "data_source" },
+      { label: "CB Source",   key: "source" },
+      { label: "CB Category", key: "category_code" },
+      { label: "Vendor",      key: "vendor" },
+      { label: "Pay Group",   key: "pay_group" },
+      { label: "FPC",         key: "fpc" },
+      { label: "Job #",       key: "jobno" },
+      { label: "Description", key: "description" },
+      { label: "Net (US$)",   key: "signed_amount", num: true, render: (r) => { const s = Number(r.signed_amount ?? r.amount); return `<span style="color:${s < 0 ? "var(--red)" : "inherit"}">${money(s)}</span>`; } },
+      { label: "Base Row",    key: "base_case_row", render: (r) => r.base_case_row ? esc(r.base_case_row) : '<span class="bad">—</span>' },
+      { label: "Rule",        key: "mapping_rule" },
+      { label: "Corrected",   key: "corrected", render: correctedMarker }
+    ], all.slice(0, CORR_SHOW));
+  }
+
+  // What a correction would do, computed without saving anything.
+  function corrBuildPlan() {
+    const field = $("corrField").value;
+    const mode = $("corrMode").value;
+    const value = $("corrValue").value, find = $("corrFind").value, repl = $("corrRepl").value;
+    if (!CC.FIELD_KEYS.includes(field)) throw new Error("Choose the field to correct.");
+    if (mode === "replace" && !find) throw new Error("Enter the text to find.");
+    const picked = state.records.filter((r) => state.corrSel.has(r.record_key));
+    if (!picked.length) throw new Error("Select at least one line.");
+    if (picked.length > CORR_MAX_LINES) throw new Error(`Select at most ${CORR_MAX_LINES.toLocaleString()} lines at a time.`);
+    const changes = [];
+    for (const r of picked) {
+      const before = String(r[field] ?? "");
+      const after = mode === "replace" ? CC.replaceText(before, find, repl) : value;
+      if (before !== after) changes.push({ r, before, after });
+    }
+    const remapped = applyMappings(changes.map((c) => ({ ...c.r, [field]: c.after })), state.rules);
+    const moves = new Map();
+    let mappedBefore = 0, mappedAfter = 0;
+    changes.forEach((c, i) => {
+      const n = remapped[i];
+      if (c.r.mapped && c.r.base_case_row) mappedBefore += 1;
+      if (n.mapped && n.base_case_row) mappedAfter += 1;
+      const from = c.r.base_case_row || "(unmapped)", to = n.base_case_row || "(unmapped)";
+      if (from !== to) {
+        const k = from + "\u0001" + to;
+        const m = moves.get(k) || { from, to, rows: 0, amount: 0 };
+        m.rows += 1; m.amount += Number(c.r.signed_amount || 0);
+        moves.set(k, m);
+      }
+    });
+    return { field, mode, picked: picked.length, changes, remapped, mappedBefore, mappedAfter, moves: [...moves.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)) };
+  }
+
+  function previewCorrection() {
+    const box = $("corrPreview");
+    try {
+      const plan = corrBuildPlan();
+      state.corrPlan = plan;
+      const tile = (label, val, sub, cls) => `<div class="recon-tile ${cls || ""}"><div class="recon-tile-label">${label}</div><div class="recon-tile-val">${val}</div><div class="recon-tile-sub">${sub}</div></div>`;
+      const moves = plan.moves.slice(0, 8).map((m) => `<tr><td>${esc(m.from)}</td><td>${esc(m.to)}</td><td class="num">${m.rows.toLocaleString()}</td><td class="num">${money(m.amount)}</td></tr>`).join("");
+      const samples = plan.changes.slice(0, 5).map((c) => `<tr><td>${esc(c.r.vendor || c.r.je_name || c.r.account || "")}</td><td>${esc(c.before) || "<span class=\"hint\">(blank)</span>"}</td><td>${esc(c.after) || "<span class=\"hint\">(blank)</span>"}</td></tr>`).join("");
+      box.innerHTML = `
+        <div class="recon-tiles">
+          ${tile("Lines selected", plan.picked.toLocaleString(), `${plan.changes.length.toLocaleString()} would change`, plan.changes.length ? "good" : "warn")}
+          ${tile("Mapped", `${plan.mappedBefore.toLocaleString()} to ${plan.mappedAfter.toLocaleString()}`, "of the lines that change", plan.mappedAfter >= plan.mappedBefore ? "good" : "warn")}
+          ${tile("Base row moves", plan.moves.reduce((s, m) => s + m.rows, 0).toLocaleString(), "lines that land on a different row", "")}
+        </div>
+        ${plan.changes.length ? `
+          <div class="tablebox" style="max-height:22vh"><table><thead><tr><th>Line</th><th>${esc(CC.labelOf(plan.field))} now</th><th>${esc(CC.labelOf(plan.field))} after</th></tr></thead><tbody>${samples}</tbody></table></div>
+          ${plan.moves.length ? `<div class="tablebox" style="max-height:22vh;margin-top:8px"><table><thead><tr><th>From</th><th>To</th><th class="num">Lines</th><th class="num">US$</th></tr></thead><tbody>${moves}</tbody></table></div>` : `<div class="hint" style="margin-top:6px">No line changes base row. Only the field value changes.</div>`}
+        ` : `<div class="recon-note">Nothing would change: the selected lines already have this value.</div>`}`;
+      $("corrApplyBtn").disabled = !plan.changes.length;
+    } catch (err) {
+      state.corrPlan = null;
+      box.innerHTML = "";
+      $("corrApplyBtn").disabled = true;
+      setStatus(err.message, "error");
+    }
+  }
+
+  async function applyCorrections() {
+    if (state.busy) return;
+    const monthKey = state.loadedMonth;
+    if (!monthKey) return setStatus("Load a saved month first.", "error");
+    if (monthIsLocked(monthKey)) return setStatus(`${monthKey} is approved and locked. Corrections are blocked.`, "error");
+    const reason = ($("corrReason").value || "").trim();
+    if (!reason) return setStatus("Enter the reason for the correction.", "error");
+    let plan;
+    try { plan = corrBuildPlan(); } catch (err) { return setStatus(err.message, "error"); }
+    if (!plan.changes.length) return setStatus("Nothing would change.", "error");
+    const blank = plan.mode === "set" && $("corrValue").value === "";
+    if (!confirm(`Correct ${CC.labelOf(plan.field)} on ${plan.changes.length.toLocaleString()} line(s) in ${monthKey}${blank ? ", setting it to blank" : ""}?\n\nReason: ${reason}`)) return;
+
+    setBusy(true);
+    try {
+      setStatus("Preparing the corrections…", "");
+      await loadApDetail();   // AP lines need their detail columns for the fingerprint
+      const byKey = new Map(state.records.map((r) => [r.record_key, r]));
+      const targets = plan.changes.map((c) => ({ row: byKey.get(c.r.record_key), after: c.after }));
+      if (targets.some((t) => !t.row || !CC.hasFingerprintInputs(t.row))) throw new Error("The detail columns for some lines could not be read. Reload the month and try again.");
+
+      // One transaction: any active correction on the same line and field is superseded and the new one inserted,
+      // so a failure cannot lose an existing correction. The database keeps the value from before the first correction.
+      const fps = CC.fingerprintsFor(state.records);
+      const logRows = targets.map((t) => ({
+        month_key: monthKey, record_key: t.row.record_key, fingerprint: fps.get(t.row.record_key), field: plan.field,
+        original_value: String(t.row[plan.field] ?? ""), corrected_value: t.after, reason, line_summary: CC.summariseLine(t.row)
+      }));
+      const { error: addErr } = await state.supabase.rpc("cashflow_add_corrections", { p_rows: logRows, p_who: userName() });
+      if (addErr) throw addErr;
+
+      setStatus(`Saving ${targets.length.toLocaleString()} corrected line(s)…`, "");
+      const results = await runInBatches(targets, 5, async (t) => {
+        const fields = CC.joinFields(t.row.corrected_fields, plan.field);
+        const next = { ...applyMappings([{ ...t.row, [plan.field]: t.after }], state.rules)[0], corrected: true, corrected_fields: fields };
+        const { error } = await state.supabase.from("cashflow_records").update({
+          [plan.field]: t.after, cashbook_category: next.cashbook_category || "", base_case_row: next.base_case_row || "", main_group: next.main_group || "",
+          sub_group: next.sub_group || "", mapped: !!next.mapped, mapping_rule: next.mapping_rule || "", corrected: true, corrected_fields: fields
+        }).eq("month_id", state.loadedMonthId).eq("record_key", t.row.record_key);
+        return error ? { error, key: t.row.record_key } : { ok: true, key: t.row.record_key, next };
+      });
+      const done = new Map(results.filter((r) => r.ok).map((r) => [r.key, r.next]));
+      state.records = state.records.map((r) => done.get(r.record_key) || r);
+      const failed = results.filter((r) => r.error);
+
+      const sample = plan.changes[0];
+      await auditLog("correct_record", monthKey, "", `Corrected ${CC.labelOf(plan.field)} on ${done.size} line(s), e.g. "${sample.before}" to "${sample.after}". Reason: ${reason}`.slice(0, 480));
+      state.corrSel = new Set(); state.corrPlan = null;
+      $("corrReason").value = ""; $("corrPreview").innerHTML = ""; $("corrApplyBtn").disabled = true;
+      await loadAudit();
+      renderAll();
+      await loadCorrectionLog(); renderCorrectionLog();
+      if (failed.length) setStatus(`Corrected ${done.size.toLocaleString()} of ${targets.length.toLocaleString()} lines. ${failed.length} could not be saved (${failed[0].error.message}). The corrections are logged and will apply when the month is next reapplied.`, "error");
+      else setStatus(`Corrected ${CC.labelOf(plan.field)} on ${done.size.toLocaleString()} line(s) in ${monthKey}`, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revertCorrection(id) {
+    if (state.busy) return;
+    const c = state.corrLog.find((x) => x.id === id);
+    if (!c || c.status !== "active") return;
+    if (monthIsLocked(c.month_key)) return setStatus(`${c.month_key} is approved and locked. Corrections are blocked.`, "error");
+    if (state.loadedMonth !== c.month_key) return setStatus(`Load ${c.month_key} first, then revert this correction.`, "error");
+    const reason = (prompt(`Reason for reverting the ${CC.labelOf(c.field)} correction?`) || "").trim();
+    if (!reason) return setStatus("Revert cancelled: a reason is required.", "");
+
+    setBusy(true);
+    try {
+      await loadApDetail();
+      const row = state.records.find((r) => r.record_key === c.record_key);
+      const fps = CC.fingerprintsFor(state.records);
+      const matches = !!row && CC.hasFingerprintInputs(row) && fps.get(row.record_key) === c.fingerprint;
+      if (!matches && c.match_status !== "unmatched") throw new Error("This line no longer matches the correction. Reapply the month, then revert it from the log.");
+
+      // The other active corrections on this line decide whether it stays marked. Read them from the database,
+      // not from the log on screen, which may be filtered or capped.
+      const { data: others, error: othersErr } = await state.supabase.from("cashflow_record_corrections").select("field")
+        .eq("month_key", c.month_key).eq("record_key", c.record_key).eq("status", "active").neq("id", c.id);
+      if (othersErr) throw othersErr;
+
+      // The log goes first. If the line then cannot be written, the log and the next reapply agree on the original value.
+      const { error: logErr } = await state.supabase.from("cashflow_record_corrections")
+        .update({ status: "reverted", reverted_by: userName(), reverted_at: timestamp(), revert_reason: reason }).eq("id", c.id).eq("status", "active");
+      if (logErr) throw logErr;
+
+      let restored = null;
+      if (matches) {
+        const fields = [...new Set((others || []).map((x) => x.field))].sort().join(",");
+        const next = { ...applyMappings([{ ...row, [c.field]: c.original_value }], state.rules)[0], corrected: !!fields, corrected_fields: fields };
+        const { error } = await state.supabase.from("cashflow_records").update({
+          [c.field]: c.original_value, cashbook_category: next.cashbook_category || "", base_case_row: next.base_case_row || "", main_group: next.main_group || "",
+          sub_group: next.sub_group || "", mapped: !!next.mapped, mapping_rule: next.mapping_rule || "", corrected: !!fields, corrected_fields: fields
+        }).eq("month_id", state.loadedMonthId).eq("record_key", c.record_key);
+        if (error) {
+          const { error: undoErr } = await state.supabase.from("cashflow_record_corrections")
+            .update({ status: "active", reverted_by: null, reverted_at: null, revert_reason: null }).eq("id", c.id);
+          throw new Error(undoErr
+            ? `The line could not be restored (${error.message}) and the log could not be put back (${undoErr.message}). Reapply ${c.month_key} to make the line follow the log.`
+            : `The line could not be restored (${error.message}). Nothing was changed.`);
+        }
+        restored = next;
+      }
+      if (restored) state.records = state.records.map((r) => r.record_key === c.record_key ? restored : r);
+      await auditLog("revert_correction", c.month_key, "", `Reverted ${CC.labelOf(c.field)} correction on "${c.line_summary}": "${c.corrected_value}" back to "${c.original_value}". Reason: ${reason}`.slice(0, 480));
+      await loadAudit();
+      renderAll();
+      await loadCorrectionLog(); renderCorrectionLog();
+      setStatus(`Reverted the ${CC.labelOf(c.field)} correction${restored ? "" : " (the line was not matched, so only the log changed)"}`, "ok");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadCorrectionLog() {
+    const month = ($("corrLogMonth") || {}).value || "";
+    const status = ($("corrLogStatus") || {}).value || "all";
+    let q = state.supabase.from("cashflow_record_corrections").select("*").order("corrected_at", { ascending: false }).limit(1000);
+    if (month) q = q.eq("month_key", month);
+    if (status === "active") q = q.eq("status", "active");
+    else if (status === "reverted") q = q.eq("status", "reverted");
+    else if (status === "unmatched") q = q.eq("status", "active").eq("match_status", "unmatched");
+    const { data, error } = await q;
+    if (error) throw error;
+    state.corrLog = data || [];
+  }
+
+  function corrStatusBadge(c) {
+    if (c.status === "reverted") return '<span class="exc-badge" style="background:#e5e7eb;color:var(--muted)">Reverted</span>';
+    if (c.match_status === "unmatched") return '<span class="exc-badge unmapped">Not matched</span>';
+    if (c.match_status === "relocated") return '<span class="exc-badge norow">Re-matched</span>';
+    return '<span class="exc-badge ok">Applied</span>';
+  }
+
+  function renderCorrectionLog() {
+    const tbl = $("corrLogTable");
+    if (!tbl) return;
+    const sel = $("corrLogMonth");
+    if (sel && !sel.dataset.filled) {
+      sel.innerHTML = '<option value="">All months</option>' + state.months.map((m) => `<option value="${esc(m.month_key)}">${esc(m.month_key)}</option>`).join("");
+      sel.value = state.loadedMonth || "";
+      sel.dataset.filled = "1";
+    }
+    $("corrLogMeta").textContent = `${state.corrLog.length.toLocaleString()} correction${state.corrLog.length === 1 ? "" : "s"}`;
+    table("corrLogTable", [
+      { label: "When",   key: "corrected_at", render: (c) => esc(fmtDateTime(c.corrected_at)) },
+      { label: "Month",  key: "month_key" },
+      { label: "Line",   key: "line_summary" },
+      { label: "Field",  key: "field", render: (c) => esc(CC.labelOf(c.field)) },
+      { label: "From",   key: "original_value", render: (c) => esc(c.original_value) || '<span class="hint">(blank)</span>' },
+      { label: "To",     key: "corrected_value", render: (c) => esc(c.corrected_value) || '<span class="hint">(blank)</span>' },
+      { label: "Reason", key: "reason" },
+      { label: "By",     key: "corrected_by" },
+      { label: "Status", key: "status", render: corrStatusBadge },
+      { label: "",       key: "id", render: (c) => c.status !== "active" ? (c.revert_reason ? `<span class="hint" title="${esc(c.revert_reason)}">${esc(c.reverted_by || "")}</span>` : "") : (state.loadedMonth === c.month_key && !monthIsLocked(c.month_key) ? `<button class="btn btn-ghost btn-sm" data-revert="${esc(c.id)}">Revert</button>` : `<span class="hint">Load ${esc(c.month_key)} to revert</span>`) }
+    ], state.corrLog);
+  }
+
+  function exportCorrectionLog() {
+    if (!state.corrLog.length) return setStatus("There are no corrections to download.", "error");
+    const rows = state.corrLog.map((c) => ({
+      When: c.corrected_at, Month: c.month_key, Line: c.line_summary, Field: CC.labelOf(c.field), From: c.original_value, To: c.corrected_value,
+      Reason: c.reason, "Corrected by": c.corrected_by || "", Status: c.status === "reverted" ? "Reverted" : c.match_status === "unmatched" ? "Not matched" : c.match_status === "relocated" ? "Re-matched" : "Applied",
+      "Reverted by": c.reverted_by || "", "Reverted at": c.reverted_at || "", "Revert reason": c.revert_reason || ""
+    }));
+    const sel = ($("corrLogMonth") || {}).value || "all";
+    download(`corrections_${sel}.csv`, toCsv(rows), "text/csv");
+  }
+
+  function renderCorrections() {
+    const fieldSel = $("corrField");
+    if (fieldSel && !fieldSel.options.length) fieldSel.innerHTML = CC.FIELDS.map((f) => `<option value="${esc(f.key)}">${esc(f.label)}</option>`).join("");
+    renderCorrectionLines();
+  }
+
+  async function openCorrections() {
+    try {
+      renderCorrections();
+      await loadCorrectionLog();
+      renderCorrectionLog();
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  }
+
+  function bindCorrectionsUi() {
+    if (!$("corrLinesTable")) return;
+    const rerender = debounce(renderCorrectionLines, 250);
+    ["corrSearch"].forEach((id) => $(id).addEventListener("input", rerender));
+    ["corrScope", "corrSource"].forEach((id) => $(id).addEventListener("change", renderCorrectionLines));
+    $("corrLinesTable").addEventListener("change", (e) => {
+      const box = e.target.closest("input[data-rk]");
+      if (!box) return;
+      if (box.checked) state.corrSel.add(box.dataset.rk); else state.corrSel.delete(box.dataset.rk);
+      state.corrPlan = null; $("corrApplyBtn").disabled = true; $("corrPreview").innerHTML = "";
+      $("corrSelCount").textContent = `${state.corrSel.size.toLocaleString()} selected`;
+    });
+    $("corrSelectAll").addEventListener("click", () => {
+      const all = corrCandidateRows();
+      if (all.length > CORR_MAX_LINES) return setStatus(`${all.length.toLocaleString()} lines match. Narrow the search to ${CORR_MAX_LINES.toLocaleString()} or fewer first.`, "error");
+      all.forEach((r) => state.corrSel.add(r.record_key));
+      state.corrPlan = null; $("corrApplyBtn").disabled = true; $("corrPreview").innerHTML = "";
+      renderCorrectionLines();
+    });
+    $("corrClearSel").addEventListener("click", () => {
+      state.corrSel = new Set(); state.corrPlan = null; $("corrApplyBtn").disabled = true; $("corrPreview").innerHTML = "";
+      renderCorrectionLines();
+    });
+    $("corrMode").addEventListener("change", () => {
+      const replace = $("corrMode").value === "replace";
+      $("corrSetWrap").style.display = replace ? "none" : "";
+      $("corrReplaceWrap").style.display = replace ? "" : "none";
+      state.corrPlan = null; $("corrApplyBtn").disabled = true;
+    });
+    ["corrField", "corrValue", "corrFind", "corrRepl"].forEach((id) => $(id).addEventListener("input", () => { state.corrPlan = null; $("corrApplyBtn").disabled = true; }));
+    $("corrPreviewBtn").addEventListener("click", previewCorrection);
+    $("corrApplyBtn").addEventListener("click", applyCorrections);
+    ["corrLogMonth", "corrLogStatus"].forEach((id) => $(id).addEventListener("change", () => loadCorrectionLog().then(renderCorrectionLog).catch((err) => setStatus(err.message, "error"))));
+    $("corrExportBtn").addEventListener("click", exportCorrectionLog);
+    $("corrLogTable").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-revert]");
+      if (btn) revertCorrection(btn.dataset.revert);
+    });
+  }
+
   function bindTabs() {
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2465,6 +2893,7 @@
     refreshFormDropdowns();
     $("monthInput").value = new Date().toISOString().slice(0, 7);
     bindTabs();
+    bindCorrectionsUi();
     bindReconUi();
     $("processBtn").addEventListener("click", processAndSaveMonth);
     $("monthSelect").addEventListener("change", async () => { const k = $("monthSelect").value; if (k) await loadMonth(k); });
@@ -2771,8 +3200,10 @@
       raw = Object.fromEntries((uploadRows || []).map((u) => [u.source_type, u.content_text]));
     }
     const sourceRows = [...mergeCashbooks(raw.cashbook_description, raw.cashbook_account), ...parseAp(raw.ap || "", "invoice_payments.txt")];
-    const next = applyMappings(sourceRows, state.rules);
-    return { monthKey, raw, next, diff: diffRecords(state.records, next) };
+    // Saved corrections are re-applied to the freshly parsed rows before the rules run.
+    const corrRes = await correctionsFor(monthKey, sourceRows);
+    const next = applyMappings(corrRes ? corrRes.rows : sourceRows, state.rules);
+    return { monthKey, raw, next, corrRes, diff: diffRecords(state.records, next) };
   }
 
   // A saved row only counts as excluded when it carries no mapping. Rows saved before the account was
@@ -2831,6 +3262,7 @@
         ${tile("Excluded rows", `${d.before.excluded.toLocaleString()} to ${d.after.excluded.toLocaleString()}`, `${bracket(d.after.excludedAmt - d.before.excludedAmt)} removed from the net`, d.after.excluded !== d.before.excluded ? "warn" : "good")}
       </div>
       ${d.added || d.removed ? `<div class="recon-note">${d.added} new and ${d.removed} missing rows compared with the saved month: the source files no longer parse to the same rows.</div>` : ""}
+      ${plan.corrRes ? `<div class="recon-note${plan.corrRes.unmatched.length ? "" : " good"}">Corrections re-applied: ${plan.corrRes.applied.toLocaleString()}${plan.corrRes.relocated ? `, ${plan.corrRes.relocated.toLocaleString()} re-matched to a new line number` : ""}${plan.corrRes.unmatched.length ? `, <b>${plan.corrRes.unmatched.length.toLocaleString()} could not be matched</b> (the line no longer exists or looks different). See the Corrections tab.` : "."}</div>` : ""}
       ${nothing ? `<div class="recon-note good">A reapply would change nothing for ${esc(plan.monthKey)}.</div>` : `
       <div class="tablebox" style="max-height:38vh"><table><thead><tr><th>From</th><th>To</th><th class="num">Rows</th><th class="num">US$</th></tr></thead><tbody>${moves || `<tr><td colspan="4" class="hint">Only the rule that applies changes, not the base row.</td></tr>`}</tbody></table></div>
       ${d.moves.length > 25 ? `<div class="hint">Showing the 25 largest of ${d.moves.length} moves. The CSV has every row.</div>` : ""}`}`;
@@ -2885,11 +3317,12 @@
       state.records = plan.next;
       state.uploads = plan.raw;
       await saveMonthToDb(plan.monthKey, plan.raw, plan.next);
+      const corrNote = plan.corrRes ? await recordCorrectionOutcomes(plan.corrRes) : "";
       await loadAudit();
       renderAll();
       hideReapplyPrompt();
       state.previewPlan = null;
-      setStatus(`Reapplied saved rules for ${plan.monthKey}`, "ok");
+      setStatus(`Reapplied saved rules for ${plan.monthKey}${corrNote}`, "ok");
       loadRecon();
     } catch (err) {
       setStatus(err.message, "error");
@@ -3116,5 +3549,5 @@
 
   bindUi();
 
-  window.cashflowApp = { prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, toggleAccount, saveAccountNote, showAccountTx, closeAccountTx, init, loadRecon, renderRecon };
+  window.cashflowApp = { openCorrections, prefillRule, loadRule, deleteRule, requestApproval, moveRule, deleteSubGroup, deleteSectionEntry, toggleAccount, saveAccountNote, showAccountTx, closeAccountTx, init, loadRecon, renderRecon };
 })();
