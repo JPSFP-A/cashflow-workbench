@@ -94,3 +94,13 @@ begin
   get diagnostics n = row_count;
   return n;
 end $$;
+
+-- Grants. This project does not grant new tables to the API roles automatically, so without these the app gets
+-- "permission denied" and process and reapply fail. No anon access: the table policy needs a signed-in user anyway.
+grant select, insert, update, delete on public.cashflow_record_corrections to authenticated;
+grant all on public.cashflow_record_corrections to service_role;
+
+revoke execute on function public.cashflow_add_corrections(jsonb, text) from public, anon;
+revoke execute on function public.cashflow_relocate_corrections(jsonb) from public, anon;
+grant execute on function public.cashflow_add_corrections(jsonb, text) to authenticated, service_role;
+grant execute on function public.cashflow_relocate_corrections(jsonb) to authenticated, service_role;
