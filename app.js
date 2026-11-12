@@ -1925,7 +1925,14 @@
       const monthMap = new Map((mRows || []).map((m) => [m.id, m.month_key]));
       const monthIds = [...monthMap.keys()];
 
-      // Paginate — include cashbook_category for sub-group breakdown
+      // Expected row count, so a page overlap or gap is caught instead of producing wrong figures.
+      const { count: expected, error: cErr } = await state.supabase
+        .from("cashflow_records").select("id", { count: "exact", head: true }).in("month_id", monthIds);
+      if (cErr) throw cErr;
+
+      // Paginate — include cashbook_category for sub-group breakdown.
+      // The order is required: LIMIT/OFFSET pages without it can overlap or skip rows when the scan order changes
+      // between page requests, which doubled one month and dropped rows from the others. (month_id, record_key) is unique.
       const PAGE = 5000;
       let all = [], page = 0;
       while (true) {
@@ -1933,12 +1940,16 @@
           .from("cashflow_records")
           .select("month_id,data_source,base_case_row,pay_group,sub_group,cashbook_category,signed_amount,jobno,source")
           .in("month_id", monthIds)
+          .order("month_id").order("record_key")
           .range(page * PAGE, (page + 1) * PAGE - 1);
         if (error) throw error;
         all = all.concat(data || []);
         setStatus(`Fetching… ${all.length.toLocaleString()} records`, "");
         if (!data || data.length < PAGE) break;
         page++;
+      }
+      if (all.length !== expected) {
+        throw new Error(`Fetched ${all.length.toLocaleString()} of ${expected.toLocaleString()} records, so the report was not produced. Please run it again.`);
       }
 
       // Two-level aggregation:
